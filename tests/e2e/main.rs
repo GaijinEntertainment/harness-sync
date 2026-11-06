@@ -7,6 +7,8 @@ mod files;
 #[cfg(test)]
 mod init;
 #[cfg(test)]
+mod marketplaces;
+#[cfg(test)]
 mod pull;
 #[cfg(test)]
 mod push;

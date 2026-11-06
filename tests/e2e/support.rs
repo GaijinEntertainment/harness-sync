@@ -121,6 +121,14 @@ impl Machine {
             .expect("run cc-sync")
     }
 
+    pub(crate) fn cc_sync_with_path(&self, path: &std::ffi::OsStr, args: &[&str]) -> Output {
+        isolated(Command::new(env!("CARGO_BIN_EXE_cc-sync")), self.home())
+            .env("PATH", path)
+            .args(args)
+            .output()
+            .expect("run cc-sync")
+    }
+
     pub(crate) fn cc_sync_in_config_dir(&self, config_dir: &str, args: &[&str]) -> Output {
         isolated(Command::new(env!("CARGO_BIN_EXE_cc-sync")), self.home())
             .env("CLAUDE_CONFIG_DIR", self.home().join(config_dir))
