@@ -11,6 +11,7 @@ pub(crate) enum ItemState {
     LocalChange,
     RemoteChange,
     Conflict,
+    Pinned,
     SecretMissing,
 }
 

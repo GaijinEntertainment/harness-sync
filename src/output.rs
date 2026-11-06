@@ -47,6 +47,7 @@ const fn label(state: ItemState) -> &'static str {
         ItemState::LocalChange => "local change",
         ItemState::RemoteChange => "remote change",
         ItemState::Conflict => "conflict",
+        ItemState::Pinned => "pinned",
         ItemState::SecretMissing => "secret missing",
     }
 }

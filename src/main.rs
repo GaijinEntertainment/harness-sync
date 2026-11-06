@@ -11,6 +11,7 @@ mod item;
 mod json_edit;
 mod output;
 mod paths;
+mod pin;
 mod pull;
 mod push;
 mod report;
@@ -25,7 +26,7 @@ use std::process::ExitCode;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::item::KeyPath;
+use crate::item::{ItemId, KeyPath};
 use crate::paths::Paths;
 use crate::pull::{Choices, Side, Take};
 use crate::report::Report;
@@ -73,6 +74,16 @@ enum Command {
         #[arg(long = "take", value_name = "ITEM=SIDE", value_parser = pull::parse_take)]
         takes: Vec<Take>,
     },
+    /// Keep an item as it is on this machine: push and pull leave it alone
+    Pin {
+        /// Item id, for example `settings:/statusLine`
+        item: ItemId,
+    },
+    /// Let push and pull move a pinned item again
+    Unpin {
+        /// Item id, for example `settings:/statusLine`
+        item: ItemId,
+    },
     /// Manage the secrets of this machine
     Secret {
         #[command(subcommand)]
@@ -117,6 +128,8 @@ fn execute(cli: &Cli) -> Result<Report> {
             },
             prompts,
         ),
+        Command::Pin { item } => pin::run(&paths, item, true),
+        Command::Unpin { item } => pin::run(&paths, item, false),
         Command::Secret {
             command: SecretCommand::Set { key_path },
         } => set_secret::run(&paths, key_path, prompts),

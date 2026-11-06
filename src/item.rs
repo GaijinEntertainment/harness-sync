@@ -59,6 +59,16 @@ impl ItemId {
     }
 }
 
+impl ItemId {
+    pub(crate) fn names_an_item(&self) -> bool {
+        let split = self
+            .path
+            .first()
+            .is_some_and(|key| SPLIT_SETTINGS_KEYS.contains(&key.as_str()));
+        self.path.len() == if split { 2 } else { 1 }
+    }
+}
+
 impl KeyPath {
     pub(crate) fn item(&self) -> ItemId {
         let split = self

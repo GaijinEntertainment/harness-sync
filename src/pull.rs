@@ -53,7 +53,7 @@ pub(crate) fn parse_take(text: &str) -> Result<Take, String> {
 
 pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result<Report> {
     let session = Session::open(paths)?;
-    let differences = session.three_way.differences();
+    let differences = session.differences();
     let is_conflict = |id: &ItemId| {
         differences
             .iter()
@@ -94,11 +94,17 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
         .collect();
     let missing = apply(paths, &session, &taken, prompts)?;
     session.git.set_base(&remote_commit)?;
+    let kept_local = differences
+        .iter()
+        .filter(|d| {
+            matches!(d.state, ItemState::LocalChange | ItemState::Conflict)
+                && !takes_remote(d, choices)
+        })
+        .count();
     let summary = with_missing_secrets(
         format!(
-            "applied {} remote changes; {} local changes remain for `cc-sync push`",
-            taken.len(),
-            differences.len() - taken.len()
+            "applied {} remote changes; {kept_local} local changes remain for `cc-sync push`",
+            taken.len()
         ),
         missing.len(),
     );
@@ -165,7 +171,7 @@ fn apply(
 fn takes_remote(difference: &Difference<'_>, choices: &Choices<'_>) -> bool {
     match difference.state {
         ItemState::RemoteChange => true,
-        ItemState::LocalChange | ItemState::SecretMissing => false,
+        ItemState::LocalChange | ItemState::Pinned | ItemState::SecretMissing => false,
         ItemState::Conflict => choices.side_for(difference.id) == Some(Side::Remote),
     }
 }

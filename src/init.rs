@@ -8,20 +8,22 @@ use crate::paths::Paths;
 use crate::report::{Outcome, Report, short_commit};
 
 pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
-    let config = Config {
-        remote: remote.to_owned(),
-        branch: branch.to_owned(),
-    };
     let config_file = paths.config_file();
-    if let Some(existing) = Config::load(&config_file)? {
+    let existing = Config::load(&config_file)?;
+    if let Some(existing) = &existing {
         ensure!(
-            existing == config,
+            existing.remote == remote && existing.branch == branch,
             "this machine is already connected to {} (branch {}); remove {} to connect it to another remote",
             existing.remote,
             existing.branch,
             paths.state_dir.display()
         );
     }
+    let config = existing.unwrap_or_else(|| Config {
+        remote: remote.to_owned(),
+        branch: branch.to_owned(),
+        pins: Vec::new(),
+    });
     fs::create_dir_all(&paths.state_dir)
         .with_context(|| format!("cannot create {}", paths.state_dir.display()))?;
     let repo_dir = paths.repo_dir();
