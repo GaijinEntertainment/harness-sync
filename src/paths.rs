@@ -29,6 +29,10 @@ impl Paths {
         self.state_dir.join("config.toml")
     }
 
+    pub(crate) fn backups_dir(&self) -> PathBuf {
+        self.state_dir.join("backups")
+    }
+
     pub(crate) fn repo_dir(&self) -> PathBuf {
         self.state_dir.join("repo.git")
     }

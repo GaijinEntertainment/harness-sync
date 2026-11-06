@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt;
+use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use serde_json::{Map, Value};
@@ -50,6 +51,26 @@ impl fmt::Display for ItemId {
             write!(f, "/{}", segment.replace('~', "~0").replace('/', "~1"))?;
         }
         Ok(())
+    }
+}
+
+impl FromStr for ItemId {
+    type Err = anyhow::Error;
+
+    fn from_str(text: &str) -> Result<Self> {
+        let Some(("settings", pointer)) = text.split_once(':') else {
+            bail!("`{text}` is not an item id; an item id looks like `settings:/env/NAME`");
+        };
+        let Some(pointer) = pointer.strip_prefix('/') else {
+            bail!("the item id `{text}` needs a JSON pointer that starts with `/`");
+        };
+        Ok(Self {
+            source: Source::Settings,
+            path: pointer
+                .split('/')
+                .map(|segment| segment.replace("~1", "/").replace("~0", "~"))
+                .collect(),
+        })
     }
 }
 
@@ -159,12 +180,18 @@ mod tests {
     }
 
     #[test]
-    fn item_ids_escape_json_pointer_segments() {
+    fn item_ids_escape_and_parse_json_pointer_segments() {
         let id = ItemId::settings(&["skillOverrides", "plugin:skill/a~b"]);
 
-        assert_eq!(
-            id.to_string(),
-            "settings:/skillOverrides/plugin:skill~1a~0b"
-        );
+        let text = id.to_string();
+
+        assert_eq!(text, "settings:/skillOverrides/plugin:skill~1a~0b");
+        assert_eq!(text.parse::<ItemId>().unwrap(), id);
+    }
+
+    #[test]
+    fn a_text_that_is_not_an_item_id_is_rejected() {
+        assert!("files:/x".parse::<ItemId>().is_err());
+        assert!("settings:env".parse::<ItemId>().is_err());
     }
 }

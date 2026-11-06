@@ -3,6 +3,8 @@
 #[cfg(test)]
 mod init;
 #[cfg(test)]
+mod pull;
+#[cfg(test)]
 mod push;
 #[cfg(test)]
 mod status;
