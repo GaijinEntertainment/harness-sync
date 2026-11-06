@@ -48,25 +48,19 @@ const CLAUDE_KEYS: [&str; 30] = [
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Source {
+pub(crate) enum JsonFile {
     Settings,
     Claude,
 }
 
-pub(crate) const JSON_SOURCES: [Source; 2] = [Source::Settings, Source::Claude];
+pub(crate) const JSON_SOURCES: [JsonFile; 2] = [JsonFile::Settings, JsonFile::Claude];
 
-impl Source {
+impl JsonFile {
     const fn name(self) -> &'static str {
         match self {
             Self::Settings => "settings",
             Self::Claude => "claude",
         }
-    }
-
-    fn from_name(name: &str) -> Option<Self> {
-        JSON_SOURCES
-            .into_iter()
-            .find(|source| source.name() == name)
     }
 
     pub(crate) const fn snapshot_file(self) -> &'static str {
@@ -95,6 +89,32 @@ impl Source {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Source {
+    Json(JsonFile),
+}
+
+impl Source {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Json(file) => file.name(),
+        }
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        JSON_SOURCES
+            .into_iter()
+            .map(Self::Json)
+            .find(|source| source.name() == name)
+    }
+
+    fn splits(self, key: &str) -> bool {
+        match self {
+            Self::Json(file) => file.splits(key),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ItemId {
     pub(crate) source: Source,
@@ -113,7 +133,7 @@ impl ItemId {
 
     #[cfg(test)]
     fn settings(path: &[&str]) -> Self {
-        Self::new(Source::Settings, path)
+        Self::new(Source::Json(JsonFile::Settings), path)
     }
 }
 
@@ -205,14 +225,15 @@ fn parse_pointer(text: &str) -> Result<(Source, Vec<String>)> {
     Ok((source, path))
 }
 
-pub(crate) fn json_items(source: Source, document: Value) -> Result<Items> {
+pub(crate) fn json_items(file: JsonFile, document: Value) -> Result<Items> {
+    let source = Source::Json(file);
     let Value::Object(keys) = document else {
         bail!("the document does not hold a JSON object");
     };
     let mut items = Items::new();
-    for (key, value) in keys.into_iter().filter(|(key, _)| source.holds(key)) {
+    for (key, value) in keys.into_iter().filter(|(key, _)| file.holds(key)) {
         match value {
-            Value::Object(entries) if source.splits(&key) => {
+            Value::Object(entries) if file.splits(&key) => {
                 for (name, entry) in entries {
                     items.insert(ItemId::new(source, &[&key, &name]), entry);
                 }
@@ -227,12 +248,15 @@ pub(crate) fn json_items(source: Source, document: Value) -> Result<Items> {
 
 #[cfg(test)]
 pub(crate) fn settings_items(document: Value) -> Result<Items> {
-    json_items(Source::Settings, document)
+    json_items(JsonFile::Settings, document)
 }
 
-pub(crate) fn json_document(items: &Items, source: Source) -> Value {
+pub(crate) fn json_document(items: &Items, file: JsonFile) -> Value {
     let mut document = Map::new();
-    for (id, value) in items.iter().filter(|(id, _)| id.source == source) {
+    for (id, value) in items
+        .iter()
+        .filter(|(id, _)| id.source == Source::Json(file))
+    {
         insert_at(&mut document, &id.path, value.clone());
     }
     Value::Object(document)
@@ -267,7 +291,7 @@ mod tests {
     #[test]
     fn claude_json_gives_only_the_catalog_keys_and_one_item_per_mcp_server() {
         let items = json_items(
-            Source::Claude,
+            JsonFile::Claude,
             json!({
                 "numStartups": 12,
                 "oauthAccount": {"emailAddress": "me@example.com"},
@@ -334,7 +358,7 @@ mod tests {
             json!({"env": {"A": "1"}, "permissions": {"deny": ["Bash"]}, "model": "opus"});
         let items = settings_items(document.clone()).unwrap();
 
-        let rebuilt = json_document(&items, Source::Settings);
+        let rebuilt = json_document(&items, JsonFile::Settings);
 
         assert_eq!(rebuilt, document);
         assert_eq!(settings_items(rebuilt).unwrap(), items);

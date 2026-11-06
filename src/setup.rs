@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 
 use crate::atomic;
 use crate::git::{Git, SnapshotFile};
-use crate::item::{Items, JSON_SOURCES, Source, json_document, json_items};
+use crate::item::{Items, JSON_SOURCES, JsonFile, json_document, json_items};
 use crate::json_edit::{self, Edit};
 use crate::paths::Paths;
 
@@ -41,10 +41,10 @@ pub(crate) fn load_snapshot(git: &Git, commit: Option<&str>) -> Result<Items> {
     Ok(items)
 }
 
-fn parse(source: Source, bytes: &[u8], origin: &Path) -> Result<Items> {
+fn parse(file: JsonFile, bytes: &[u8], origin: &Path) -> Result<Items> {
     let document = serde_json::from_slice(bytes)
         .with_context(|| format!("{} is not valid JSON", origin.display()))?;
-    json_items(source, document)
+    json_items(file, document)
         .with_context(|| format!("cannot read the items of {}", origin.display()))
 }
 
@@ -68,8 +68,8 @@ pub(crate) fn snapshot_files(items: &Items) -> Result<Vec<SnapshotFile>> {
         .collect()
 }
 
-pub(crate) fn write_local(paths: &Paths, source: Source, edits: &[Edit<'_>]) -> Result<()> {
-    let path = paths.json_file(source);
+pub(crate) fn write_local(paths: &Paths, file: JsonFile, edits: &[Edit<'_>]) -> Result<()> {
+    let path = paths.json_file(file);
     let original = match fs::read_to_string(&path) {
         Ok(text) => Some(text),
         Err(err) if err.kind() == ErrorKind::NotFound => None,

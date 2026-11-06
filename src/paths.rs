@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
-use crate::item::Source;
+use crate::item::JsonFile;
 
 #[derive(Debug)]
 pub(crate) struct Paths {
@@ -31,10 +31,10 @@ impl Paths {
         })
     }
 
-    pub(crate) fn json_file(&self, source: Source) -> PathBuf {
-        match source {
-            Source::Settings => self.claude_dir.join("settings.json"),
-            Source::Claude => self.claude_json.clone(),
+    pub(crate) fn json_file(&self, file: JsonFile) -> PathBuf {
+        match file {
+            JsonFile::Settings => self.claude_dir.join("settings.json"),
+            JsonFile::Claude => self.claude_json.clone(),
         }
     }
 
