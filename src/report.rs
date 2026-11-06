@@ -76,7 +76,9 @@ pub(crate) fn with_missing_secrets(summary: String, missing: usize) -> String {
     if missing == 0 {
         summary
     } else {
-        format!("{summary}; {missing} secrets missing")
+        format!(
+            "{summary}; {missing} secrets missing: set each with `cc-sync secret set <key path>`"
+        )
     }
 }
 

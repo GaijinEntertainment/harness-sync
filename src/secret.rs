@@ -113,53 +113,93 @@ fn fill(view: &mut Items, key: &KeyPath) {
     }
 }
 
-pub(crate) fn restore(id: &ItemId, remote: &Value, local: Option<&Value>) -> Restored {
+pub(crate) type Ask<'a> = dyn FnMut(&KeyPath) -> Result<Option<String>> + 'a;
+
+pub(crate) fn restore(
+    id: &ItemId,
+    remote: &Value,
+    local: Option<&Value>,
+    ask: &mut Ask<'_>,
+) -> Result<Restored> {
     let mut value = remote.clone();
-    let mut missing = Vec::new();
-    let keep = restore_value(&mut value, local, &mut id.key_path(), &mut missing);
-    Restored {
+    let mut restore = Restore {
+        key: id.key_path(),
+        missing: Vec::new(),
+        ask,
+        error: None,
+    };
+    let keep = restore.value(&mut value, local);
+    if let Some(err) = restore.error {
+        return Err(err);
+    }
+    Ok(Restored {
         value: keep.then_some(value),
-        missing,
+        missing: restore.missing,
+    })
+}
+
+struct Restore<'a, 'b> {
+    key: KeyPath,
+    missing: Vec<KeyPath>,
+    ask: &'a mut Ask<'b>,
+    error: Option<anyhow::Error>,
+}
+
+impl Restore<'_, '_> {
+    fn value(&mut self, value: &mut Value, local: Option<&Value>) -> bool {
+        match value {
+            Value::String(text) if is_placeholder(text) => self.secret(value, local),
+            Value::Object(entries) => {
+                entries.retain(|name, child| {
+                    self.key.path.push(name.clone());
+                    let keep = self.value(child, local.and_then(|l| l.get(name)));
+                    self.key.path.pop();
+                    keep
+                });
+                true
+            }
+            Value::Array(elements) => {
+                let mut index = 0;
+                elements.retain_mut(|child| {
+                    self.key.path.push(index.to_string());
+                    let keep = self.value(child, local.and_then(|l| l.get(index)));
+                    self.key.path.pop();
+                    index += 1;
+                    keep
+                });
+                true
+            }
+            _ => true,
+        }
+    }
+
+    fn secret(&mut self, value: &mut Value, local: Option<&Value>) -> bool {
+        if let Some(local) = local {
+            local.clone_into(value);
+            return true;
+        }
+        if self.error.is_some() {
+            return false;
+        }
+        match (self.ask)(&self.key) {
+            Ok(Some(entered)) => {
+                *value = Value::String(entered);
+                true
+            }
+            Ok(None) => {
+                self.missing.push(self.key.clone());
+                false
+            }
+            Err(err) => {
+                self.error = Some(err);
+                false
+            }
+        }
     }
 }
 
-fn restore_value(
-    value: &mut Value,
-    local: Option<&Value>,
-    key: &mut KeyPath,
-    missing: &mut Vec<KeyPath>,
-) -> bool {
-    match value {
-        Value::String(text) if is_placeholder(text) => {
-            if let Some(local) = local {
-                local.clone_into(value);
-                return true;
-            }
-            missing.push(key.clone());
-            false
-        }
-        Value::Object(entries) => {
-            entries.retain(|name, child| {
-                key.path.push(name.clone());
-                let keep = restore_value(child, local.and_then(|l| l.get(name)), key, missing);
-                key.path.pop();
-                keep
-            });
-            true
-        }
-        Value::Array(elements) => {
-            let mut index = 0;
-            elements.retain_mut(|child| {
-                key.path.push(index.to_string());
-                let keep = restore_value(child, local.and_then(|l| l.get(index)), key, missing);
-                key.path.pop();
-                index += 1;
-                keep
-            });
-            true
-        }
-        _ => true,
-    }
+pub(crate) fn is_secret_path(key: &KeyPath) -> bool {
+    key.path.iter().any(|segment| is_secret_key(segment))
 }
 
 pub(crate) fn scan(items: &Items) -> Vec<KeyPath> {
@@ -437,7 +477,7 @@ mod tests {
             json!({"url": "b", "apiToken": "<cc-sync secret settings:/pluginConfigs/p/apiToken>"});
         let local = json!({"url": "a", "apiToken": "mine"});
 
-        let restored = restore(&id, &remote, Some(&local));
+        let restored = restore(&id, &remote, Some(&local), &mut |_| Ok(None)).unwrap();
 
         assert_eq!(
             restored.value,
@@ -453,17 +493,40 @@ mod tests {
             json!({"url": "b", "apiToken": "<cc-sync secret settings:/pluginConfigs/p/apiToken>"});
         let whole = key("settings:/env/GITHUB_TOKEN").item();
 
-        let partial = restore(&id, &remote, None);
+        let partial = restore(&id, &remote, None, &mut |_| Ok(None)).unwrap();
         let absent = restore(
             &whole,
             &json!("<cc-sync secret settings:/env/GITHUB_TOKEN>"),
             None,
-        );
+            &mut |_| Ok(None),
+        )
+        .unwrap();
 
         assert_eq!(partial.value, Some(json!({"url": "b"})));
         assert_eq!(partial.missing, [key("settings:/pluginConfigs/p/apiToken")]);
         assert_eq!(absent.value, None);
         assert_eq!(absent.missing, [key("settings:/env/GITHUB_TOKEN")]);
+    }
+
+    #[test]
+    fn restore_asks_for_a_secret_that_the_machine_does_not_have() {
+        let id = key("settings:/env/GITHUB_TOKEN").item();
+        let mut asked = Vec::new();
+
+        let restored = restore(
+            &id,
+            &json!("<cc-sync secret settings:/env/GITHUB_TOKEN>"),
+            None,
+            &mut |key| {
+                asked.push(key.clone());
+                Ok(Some("entered".to_owned()))
+            },
+        )
+        .unwrap();
+
+        assert_eq!(restored.value, Some(json!("entered")));
+        assert_eq!(restored.missing, []);
+        assert_eq!(asked, [key("settings:/env/GITHUB_TOKEN")]);
     }
 
     #[test]

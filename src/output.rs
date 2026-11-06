@@ -1,9 +1,10 @@
 use std::fmt::Write as _;
-use std::io::{self, ErrorKind, Write};
+use std::io::{self, ErrorKind, IsTerminal, Write};
 
 use anyhow::Result;
 
 use crate::compare::ItemState;
+use crate::item::KeyPath;
 use crate::report::Report;
 
 pub(crate) fn report(report: &Report, json: bool) -> Result<()> {
@@ -16,6 +17,15 @@ pub(crate) fn report(report: &Report, json: bool) -> Result<()> {
         Err(err) if err.kind() != ErrorKind::BrokenPipe => Err(err.into()),
         _ => Ok(()),
     }
+}
+
+pub(crate) fn can_prompt(no_input: bool) -> bool {
+    !no_input && io::stdin().is_terminal() && io::stdout().is_terminal()
+}
+
+pub(crate) fn ask_secret(key: &KeyPath) -> Result<Option<String>> {
+    let value = rpassword::prompt_password(format!("value of the secret {key} (empty to skip): "))?;
+    Ok(Some(value).filter(|value| !value.is_empty()))
 }
 
 pub(crate) fn error(err: &anyhow::Error) {
