@@ -33,6 +33,10 @@ impl Paths {
         self.state_dir.join("backups")
     }
 
+    pub(crate) fn missing_secrets_file(&self) -> PathBuf {
+        self.state_dir.join("missing-secrets.toml")
+    }
+
     pub(crate) fn repo_dir(&self) -> PathBuf {
         self.state_dir.join("repo.git")
     }

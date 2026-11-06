@@ -124,6 +124,14 @@ impl Remote {
         text(&output.stdout)
     }
 
+    pub(crate) fn all_objects(&self) -> String {
+        text(
+            &self
+                .git(&["cat-file", "--batch-all-objects", "--batch"])
+                .stdout,
+        )
+    }
+
     pub(crate) fn git(&self, args: &[&str]) -> Output {
         isolated(Command::new("git"), self.dir.path())
             .arg("--git-dir")

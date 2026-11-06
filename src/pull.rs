@@ -1,13 +1,15 @@
+use std::collections::BTreeSet;
+
 use anyhow::{Result, ensure};
 use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
-use crate::item::ItemId;
+use crate::item::{ItemId, KeyPath};
 use crate::paths::Paths;
-use crate::report::{ItemReport, Outcome, Report};
+use crate::report::{ItemReport, Outcome, Report, with_missing_secrets};
 use crate::session::Session;
-use crate::setup;
+use crate::{secret, setup};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Side {
@@ -84,29 +86,63 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>) -> Result<Report> {
         );
         return Ok(report(&session, &differences, Outcome::Conflicts, summary));
     }
-    let writes: Vec<(&ItemId, Option<&Value>)> = differences
+    let taken: Vec<&Difference<'_>> = differences
         .iter()
         .filter(|d| takes_remote(d, choices))
-        .map(|d| (d.id, d.remote))
         .collect();
-    if !writes.is_empty() {
-        setup::write_local(paths, &writes)?;
-    }
+    let missing = apply(paths, &session, &taken)?;
     session.git.set_base(&remote_commit)?;
-    let summary = format!(
-        "applied {} remote changes; {} local changes remain for `cc-sync push`",
-        writes.len(),
-        differences.len() - writes.len()
+    let summary = with_missing_secrets(
+        format!(
+            "applied {} remote changes; {} local changes remain for `cc-sync push`",
+            taken.len(),
+            differences.len() - taken.len()
+        ),
+        missing.len(),
     );
     let mut pulled = report(&session, &differences, Outcome::Ok, summary);
+    pulled
+        .items
+        .extend(missing.iter().map(ItemReport::secret_missing));
     pulled.base_commit = Some(remote_commit);
     Ok(pulled)
+}
+
+fn apply(paths: &Paths, session: &Session, taken: &[&Difference<'_>]) -> Result<BTreeSet<KeyPath>> {
+    let mut missing = session.missing_secrets.clone();
+    let mut writes: Vec<(&ItemId, Option<Value>)> = Vec::new();
+    for difference in taken {
+        let Some(remote) = difference.remote else {
+            writes.push((difference.id, None));
+            continue;
+        };
+        let restored = secret::restore(
+            difference.id,
+            remote,
+            session.local_setup.get(difference.id),
+        );
+        missing.extend(restored.missing);
+        if let Some(value) = restored.value {
+            writes.push((difference.id, Some(value)));
+        }
+    }
+    let setup_now = if writes.is_empty() {
+        session.local_setup.clone()
+    } else {
+        setup::write_local(paths, &writes)?;
+        setup::load_local(paths)?
+    };
+    let missing = secret::still_missing(missing, &setup_now, &session.three_way.remote);
+    if missing != session.missing_secrets {
+        secret::save_missing(&paths.missing_secrets_file(), &missing)?;
+    }
+    Ok(missing)
 }
 
 fn takes_remote(difference: &Difference<'_>, choices: &Choices<'_>) -> bool {
     match difference.state {
         ItemState::RemoteChange => true,
-        ItemState::LocalChange => false,
+        ItemState::LocalChange | ItemState::SecretMissing => false,
         ItemState::Conflict => choices.side_for(difference.id) == Some(Side::Remote),
     }
 }

@@ -56,7 +56,7 @@ pub(crate) fn snapshot_files(items: &Items) -> Result<Vec<SnapshotFile>> {
     }])
 }
 
-pub(crate) fn write_local(paths: &Paths, changes: &[(&ItemId, Option<&Value>)]) -> Result<()> {
+pub(crate) fn write_local(paths: &Paths, changes: &[(&ItemId, Option<Value>)]) -> Result<()> {
     let path = paths.settings_file();
     let original = match fs::read_to_string(&path) {
         Ok(text) => Some(text),
@@ -65,9 +65,9 @@ pub(crate) fn write_local(paths: &Paths, changes: &[(&ItemId, Option<&Value>)]) 
     };
     let edits: Vec<Edit<'_>> = changes
         .iter()
-        .map(|&(id, value)| Edit {
+        .map(|(id, value)| Edit {
             path: &id.path,
-            value,
+            value: value.as_ref(),
         })
         .collect();
     let edited = json_edit::apply(original.as_deref().unwrap_or("{}\n"), &edits)

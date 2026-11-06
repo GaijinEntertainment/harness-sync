@@ -27,7 +27,7 @@ fn human(report: &Report) -> String {
     let mut text = format!("{}\n", report.summary);
     for item in &report.items {
         // ignored: writing to a String cannot fail
-        let _ = writeln!(text, "  {:<13}  {}", label(item.state), item.id);
+        let _ = writeln!(text, "  {:<14}  {}", label(item.state), item.id);
     }
     text
 }
@@ -37,5 +37,6 @@ const fn label(state: ItemState) -> &'static str {
         ItemState::LocalChange => "local change",
         ItemState::RemoteChange => "remote change",
         ItemState::Conflict => "conflict",
+        ItemState::SecretMissing => "secret missing",
     }
 }

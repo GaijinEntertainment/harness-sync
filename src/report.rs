@@ -2,6 +2,8 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
+use crate::item::KeyPath;
+use crate::secret;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -48,6 +50,25 @@ impl From<&Difference<'_>> for ItemReport {
             local: difference.local.cloned(),
             remote: difference.remote.cloned(),
         }
+    }
+}
+
+impl ItemReport {
+    pub(crate) fn secret_missing(key: &KeyPath) -> Self {
+        Self {
+            id: key.to_string(),
+            state: ItemState::SecretMissing,
+            local: None,
+            remote: Some(Value::String(secret::placeholder(key))),
+        }
+    }
+}
+
+pub(crate) fn with_missing_secrets(summary: String, missing: usize) -> String {
+    if missing == 0 {
+        summary
+    } else {
+        format!("{summary}; {missing} secrets missing")
     }
 }
 
