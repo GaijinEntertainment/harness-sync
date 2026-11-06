@@ -14,6 +14,7 @@ mod push;
 mod report;
 mod secret;
 mod session;
+mod set_secret;
 mod setup;
 mod status;
 
@@ -22,6 +23,7 @@ use std::process::ExitCode;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+use crate::item::KeyPath;
 use crate::paths::Paths;
 use crate::pull::{Choices, Side, Take};
 use crate::report::Report;
@@ -39,6 +41,9 @@ struct Cli {
     /// Print the report as JSON
     #[arg(long, global = true)]
     json: bool,
+    /// Never prompt; settle each choice with flags
+    #[arg(long, global = true)]
+    no_input: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -66,6 +71,20 @@ enum Command {
         #[arg(long = "take", value_name = "ITEM=SIDE", value_parser = pull::parse_take)]
         takes: Vec<Take>,
     },
+    /// Manage the secrets of this machine
+    Secret {
+        #[command(subcommand)]
+        command: SecretCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum SecretCommand {
+    /// Set a secret value on this machine, from a TTY prompt or from stdin
+    Set {
+        /// Key path of the secret, for example `settings:/env/GITHUB_TOKEN`
+        key_path: KeyPath,
+    },
 }
 
 fn main() -> ExitCode {
@@ -83,6 +102,7 @@ fn main() -> ExitCode {
 
 fn execute(cli: &Cli) -> Result<Report> {
     let paths = Paths::from_env()?;
+    let prompts = output::can_prompt(cli.no_input);
     match &cli.command {
         Command::Init { remote, branch } => init::run(&paths, remote, branch),
         Command::Status => status::run(&paths),
@@ -93,6 +113,10 @@ fn execute(cli: &Cli) -> Result<Report> {
                 prefer: *prefer,
                 takes,
             },
+            prompts,
         ),
+        Command::Secret {
+            command: SecretCommand::Set { key_path },
+        } => set_secret::run(&paths, key_path, prompts),
     }
 }

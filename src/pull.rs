@@ -6,6 +6,8 @@ use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
 use crate::item::{ItemId, KeyPath};
+use crate::json_edit::Edit;
+use crate::output;
 use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, with_missing_secrets};
 use crate::session::Session;
@@ -49,7 +51,7 @@ pub(crate) fn parse_take(text: &str) -> Result<Take, String> {
     })
 }
 
-pub(crate) fn run(paths: &Paths, choices: &Choices<'_>) -> Result<Report> {
+pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result<Report> {
     let session = Session::open(paths)?;
     let differences = session.three_way.differences();
     let is_conflict = |id: &ItemId| {
@@ -90,7 +92,7 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>) -> Result<Report> {
         .iter()
         .filter(|d| takes_remote(d, choices))
         .collect();
-    let missing = apply(paths, &session, &taken)?;
+    let missing = apply(paths, &session, &taken, prompts)?;
     session.git.set_base(&remote_commit)?;
     let summary = with_missing_secrets(
         format!(
@@ -108,8 +110,20 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>) -> Result<Report> {
     Ok(pulled)
 }
 
-fn apply(paths: &Paths, session: &Session, taken: &[&Difference<'_>]) -> Result<BTreeSet<KeyPath>> {
+fn apply(
+    paths: &Paths,
+    session: &Session,
+    taken: &[&Difference<'_>],
+    prompts: bool,
+) -> Result<BTreeSet<KeyPath>> {
     let mut missing = session.missing_secrets.clone();
+    let mut ask = |key: &KeyPath| {
+        if prompts {
+            output::ask_secret(key)
+        } else {
+            Ok(None)
+        }
+    };
     let mut writes: Vec<(&ItemId, Option<Value>)> = Vec::new();
     for difference in taken {
         let Some(remote) = difference.remote else {
@@ -120,7 +134,8 @@ fn apply(paths: &Paths, session: &Session, taken: &[&Difference<'_>]) -> Result<
             difference.id,
             remote,
             session.local_setup.get(difference.id),
-        );
+            &mut ask,
+        )?;
         missing.extend(restored.missing);
         if let Some(value) = restored.value {
             writes.push((difference.id, Some(value)));
@@ -129,7 +144,14 @@ fn apply(paths: &Paths, session: &Session, taken: &[&Difference<'_>]) -> Result<
     let setup_now = if writes.is_empty() {
         session.local_setup.clone()
     } else {
-        setup::write_local(paths, &writes)?;
+        let edits: Vec<Edit<'_>> = writes
+            .iter()
+            .map(|(id, value)| Edit {
+                path: &id.path,
+                value: value.as_ref(),
+            })
+            .collect();
+        setup::write_local(paths, &edits)?;
         setup::load_local(paths)?
     };
     let missing = secret::still_missing(missing, &setup_now, &session.three_way.remote);

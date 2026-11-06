@@ -4,11 +4,10 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use serde_json::Value;
 
 use crate::atomic;
 use crate::git::{Git, SnapshotFile};
-use crate::item::{ItemId, Items, settings_document, settings_items};
+use crate::item::{Items, settings_document, settings_items};
 use crate::json_edit::{self, Edit};
 use crate::paths::Paths;
 
@@ -56,21 +55,14 @@ pub(crate) fn snapshot_files(items: &Items) -> Result<Vec<SnapshotFile>> {
     }])
 }
 
-pub(crate) fn write_local(paths: &Paths, changes: &[(&ItemId, Option<Value>)]) -> Result<()> {
+pub(crate) fn write_local(paths: &Paths, edits: &[Edit<'_>]) -> Result<()> {
     let path = paths.settings_file();
     let original = match fs::read_to_string(&path) {
         Ok(text) => Some(text),
         Err(err) if err.kind() == ErrorKind::NotFound => None,
         Err(err) => return Err(err).with_context(|| format!("cannot read {}", path.display())),
     };
-    let edits: Vec<Edit<'_>> = changes
-        .iter()
-        .map(|(id, value)| Edit {
-            path: &id.path,
-            value: value.as_ref(),
-        })
-        .collect();
-    let edited = json_edit::apply(original.as_deref().unwrap_or("{}\n"), &edits)
+    let edited = json_edit::apply(original.as_deref().unwrap_or("{}\n"), edits)
         .with_context(|| format!("cannot edit {}", path.display()))?;
     if let Some(original) = &original {
         backup(paths, "settings.json", original.as_bytes())?;

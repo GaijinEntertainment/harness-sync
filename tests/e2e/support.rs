@@ -1,6 +1,7 @@
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
 use serde_json::Value;
 use tempfile::TempDir;
@@ -60,6 +61,23 @@ impl Machine {
             .args(args)
             .output()
             .expect("run cc-sync")
+    }
+
+    pub(crate) fn cc_sync_with_input(&self, args: &[&str], input: &str) -> Output {
+        let mut child = isolated(Command::new(env!("CARGO_BIN_EXE_cc-sync")), self.home())
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("start cc-sync");
+        child
+            .stdin
+            .take()
+            .expect("stdin is piped")
+            .write_all(input.as_bytes())
+            .expect("write the input of cc-sync");
+        child.wait_with_output().expect("run cc-sync")
     }
 
     pub(crate) fn cc_sync_json(&self, args: &[&str]) -> (Value, Output) {

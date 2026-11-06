@@ -80,3 +80,37 @@ fn a_token_outside_a_placeholder_blocks_the_push() {
     assert!(!String::from_utf8_lossy(&output.stdout).contains(TOKEN));
     assert_eq!(remote.head("main"), None);
 }
+
+#[test]
+fn secret_set_fills_a_missing_secret_from_stdin() {
+    let remote = Remote::new();
+    let first = connected(&remote, &json!({"env": {"GITHUB_TOKEN": TOKEN}}));
+    assert_exit(&first.cc_sync(&["push"]), 0);
+    let second = connected(&remote, &json!({}));
+    assert_exit(&second.cc_sync(&["pull"]), 0);
+
+    let output = second.cc_sync_with_input(
+        &["secret", "set", "settings:/env/GITHUB_TOKEN"],
+        "mine-value\n",
+    );
+
+    assert_exit(&output, 0);
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("mine-value"));
+    assert_eq!(
+        second.settings(),
+        json!({"env": {"GITHUB_TOKEN": "mine-value"}})
+    );
+    let (status, _) = second.cc_sync_json(&["status"]);
+    assert_eq!(status["items"], json!([]));
+}
+
+#[test]
+fn secret_set_refuses_a_key_path_that_is_not_a_secret() {
+    let remote = Remote::new();
+    let machine = connected(&remote, &json!({"model": "opus"}));
+
+    let output = machine.cc_sync_with_input(&["secret", "set", "settings:/model"], "sonnet\n");
+
+    assert_exit(&output, 1);
+    assert_eq!(machine.settings(), json!({"model": "opus"}));
+}
