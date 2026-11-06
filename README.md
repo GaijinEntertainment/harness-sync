@@ -88,8 +88,8 @@ off.
 ## Secrets
 
 Push replaces each secret string with a placeholder such as `<cc-sync secret settings:/env/GITHUB_TOKEN>`, so the repo
-never holds the value. A string is a secret when a key on its path is `Authorization` or contains `TOKEN`, `SECRET`,
-`PASSWORD`, or `HEADERS`, or ends with `_KEY`, in any case. The repo can declare more key paths; see
+never holds the value. A string is a secret when a key on its path, in any case, is `Authorization` or ends with
+`TOKEN`, `SECRET`, `PASSWORD`, `HEADERS`, or `_KEY`. The repo can declare more key paths; see
 [`cc-sync.toml`](#cc-synctoml).
 
 Before it commits, push scans the outgoing snapshot, authored files included, for token-like strings outside a

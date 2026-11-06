@@ -54,10 +54,9 @@ pub(crate) fn is_placeholder(text: &str) -> bool {
 fn is_secret_key(key: &str) -> bool {
     let key = key.to_ascii_uppercase();
     key == "AUTHORIZATION"
-        || key.ends_with("_KEY")
-        || ["TOKEN", "SECRET", "PASSWORD", "HEADERS"]
+        || ["_KEY", "TOKEN", "SECRET", "PASSWORD", "HEADERS"]
             .iter()
-            .any(|part| key.contains(part))
+            .any(|ending| key.ends_with(ending))
 }
 
 pub(crate) fn local_view(
@@ -369,14 +368,29 @@ mod tests {
         let secret = [
             "Authorization",
             "GITHUB_TOKEN",
+            "accessToken",
             "api_key",
             "CLIENT_SECRET",
             "dbPassword",
             "headers",
+            "OTEL_EXPORTER_OTLP_HEADERS",
         ];
         let plain = ["model", "apiKeyHelper", "KEYBOARD", "env"];
 
         assert!(secret.iter().all(|key| is_secret_key(key)), "{secret:?}");
+        assert!(!plain.iter().any(|key| is_secret_key(key)), "{plain:?}");
+    }
+
+    #[test]
+    fn name_rules_skip_keys_that_hold_a_secret_word_before_their_end() {
+        let plain = [
+            "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
+            "MAX_THINKING_TOKENS",
+            "otelHeadersHelper",
+            "headersHelper",
+            "PASSWORD_FILE",
+        ];
+
         assert!(!plain.iter().any(|key| is_secret_key(key)), "{plain:?}");
     }
 
