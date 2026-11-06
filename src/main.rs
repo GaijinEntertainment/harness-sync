@@ -5,6 +5,7 @@ mod compare;
 mod config;
 mod declarations;
 mod git;
+mod home;
 mod init;
 mod item;
 mod json_edit;
