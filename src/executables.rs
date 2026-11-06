@@ -25,7 +25,9 @@ fn commands(setup: &Items) -> Vec<(String, String)> {
     let mut commands = Vec::new();
     for (id, value) in setup {
         match id.path.first().map(String::as_str) {
-            Some("statusLine") => push_command(&mut commands, id, &["command"], value),
+            Some("statusLine" | "mcpServers") => {
+                push_command(&mut commands, id, &["command"], value);
+            }
             Some("hooks") => hook_commands(&mut commands, id, value),
             _ => {}
         }

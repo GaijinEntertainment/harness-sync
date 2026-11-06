@@ -37,6 +37,16 @@ impl Machine {
         serde_json::from_str(&self.settings_text()).expect("settings.json is JSON")
     }
 
+    pub(crate) fn write_file(&self, relative: &str, text: &str) {
+        let path = self.home().join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, text).unwrap();
+    }
+
+    pub(crate) fn read_file(&self, relative: &str) -> Option<String> {
+        fs::read_to_string(self.home().join(relative)).ok()
+    }
+
     pub(crate) fn settings_text(&self) -> String {
         fs::read_to_string(self.settings_file()).expect("read settings.json")
     }
@@ -58,6 +68,14 @@ impl Machine {
 
     pub(crate) fn cc_sync(&self, args: &[&str]) -> Output {
         isolated(Command::new(env!("CARGO_BIN_EXE_cc-sync")), self.home())
+            .args(args)
+            .output()
+            .expect("run cc-sync")
+    }
+
+    pub(crate) fn cc_sync_in_config_dir(&self, config_dir: &str, args: &[&str]) -> Output {
+        isolated(Command::new(env!("CARGO_BIN_EXE_cc-sync")), self.home())
+            .env("CLAUDE_CONFIG_DIR", self.home().join(config_dir))
             .args(args)
             .output()
             .expect("run cc-sync")

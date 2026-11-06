@@ -14,17 +14,52 @@ const SPLIT_SETTINGS_KEYS: [&str; 6] = [
     "modelSettings",
 ];
 
+const CLAUDE_KEYS: [&str; 30] = [
+    "mcpServers",
+    "autoConnectIde",
+    "autoInstallIdeExtension",
+    "claudeInChromeDefaultEnabled",
+    "copyFullResponse",
+    "copyOnSelect",
+    "defaultToAgentsView",
+    "diffTool",
+    "externalEditorContext",
+    "leftArrowOpensAgents",
+    "permissionExplainerEnabled",
+    "prStatusFooterEnabled",
+    "teammateDefaultModel",
+    "respectGitignore",
+    "showTurnDuration",
+    "terminalProgressBarEnabled",
+    "theme",
+    "verbose",
+    "workflowSizeGuideline",
+    "teammateMode",
+    "agentPushNotifEnabled",
+    "inputNeededNotifEnabled",
+    "preferredNotifChannel",
+    "remoteControlAtStartup",
+    "autoUpdates",
+    "showSpinnerTree",
+    "diffSidebarOpen",
+    "deepLinkTerminal",
+    "lspRecommendationDisabled",
+    "companionMuted",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Source {
     Settings,
+    Claude,
 }
 
-pub(crate) const JSON_SOURCES: [Source; 1] = [Source::Settings];
+pub(crate) const JSON_SOURCES: [Source; 2] = [Source::Settings, Source::Claude];
 
 impl Source {
     const fn name(self) -> &'static str {
         match self {
             Self::Settings => "settings",
+            Self::Claude => "claude",
         }
     }
 
@@ -37,17 +72,26 @@ impl Source {
     pub(crate) const fn snapshot_file(self) -> &'static str {
         match self {
             Self::Settings => "settings.json",
+            Self::Claude => "claude.json",
         }
     }
 
     const fn split_keys(self) -> &'static [&'static str] {
         match self {
             Self::Settings => &SPLIT_SETTINGS_KEYS,
+            Self::Claude => &["mcpServers"],
         }
     }
 
     fn splits(self, key: &str) -> bool {
         self.split_keys().contains(&key)
+    }
+
+    fn holds(self, key: &str) -> bool {
+        match self {
+            Self::Settings => true,
+            Self::Claude => CLAUDE_KEYS.contains(&key),
+        }
     }
 }
 
@@ -166,7 +210,7 @@ pub(crate) fn json_items(source: Source, document: Value) -> Result<Items> {
         bail!("the document does not hold a JSON object");
     };
     let mut items = Items::new();
-    for (key, value) in keys {
+    for (key, value) in keys.into_iter().filter(|(key, _)| source.holds(key)) {
         match value {
             Value::Object(entries) if source.splits(&key) => {
                 for (name, entry) in entries {
@@ -219,6 +263,33 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn claude_json_gives_only_the_catalog_keys_and_one_item_per_mcp_server() {
+        let items = json_items(
+            Source::Claude,
+            json!({
+                "numStartups": 12,
+                "oauthAccount": {"emailAddress": "me@example.com"},
+                "projects": {"/x": {"mcpServers": {"p": {}}}},
+                "mcpServers": {"kartta": {"command": "kartta"}, "web": {"type": "http", "url": "u"}},
+                "theme": "dark",
+                "autoUpdates": false
+            }),
+        )
+        .unwrap();
+
+        let ids: Vec<String> = items.keys().map(ToString::to_string).collect();
+        assert_eq!(
+            ids,
+            [
+                "claude:/autoUpdates",
+                "claude:/mcpServers/kartta",
+                "claude:/mcpServers/web",
+                "claude:/theme"
+            ]
+        );
+    }
 
     #[test]
     fn split_keys_become_one_item_per_entry() {
