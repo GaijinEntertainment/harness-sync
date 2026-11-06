@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 use crate::config::Config;
 use crate::git::{self, BASE_REF, Git};
 use crate::paths::Paths;
-use crate::report::{Outcome, Report};
+use crate::report::{Outcome, Report, short_commit};
 
 pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
     let config = Config {
@@ -38,7 +38,7 @@ pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
         |commit| {
             format!(
                 "connected to {remote}; branch {branch} is at {}: run `cc-sync pull --prefer remote` to take it",
-                short(commit)
+                short_commit(commit)
             )
         },
     );
@@ -50,8 +50,4 @@ pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
         items: Vec::new(),
         summary,
     })
-}
-
-fn short(commit: &str) -> &str {
-    commit.get(..12).unwrap_or(commit)
 }
