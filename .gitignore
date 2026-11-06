@@ -1,0 +1,13 @@
+.DS_Store
+
+# IDE configuration
+.idea/
+.vscode/
+
+# Rust build artifacts
+/target/
+
+# Claude Code local overrides and worktrees
+.claude/settings.local.json
+.claude/*.local.json
+.claude/worktrees/
