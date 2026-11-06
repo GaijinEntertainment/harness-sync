@@ -86,10 +86,10 @@ Shared shapes that the phases build on:
 
 **Acceptance criteria:**
 
-- [ ] No remote snapshot commit contains a value that a name rule matched.
-- [ ] A token-like string outside a placeholder stops `push` with exit code 5.
-- [ ] `pull` without a TTY reports each missing secret and exits 0.
-- [ ] A pinned item keeps its local value through `push` and `pull`.
+- [x] No remote snapshot commit contains a value that a name rule matched.
+- [x] A token-like string outside a placeholder stops `push` with exit code 5.
+- [x] `pull` without a TTY reports each missing secret and exits 0.
+- [x] A pinned item keeps its local value through `push` and `pull`.
 
 ## Phase 3: Full catalog — `~/.claude.json` keys, authored files, referenced files
 
