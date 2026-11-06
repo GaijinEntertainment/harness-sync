@@ -1,11 +1,15 @@
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
+use serde_json::Value;
 
+use crate::atomic;
 use crate::git::{Git, SnapshotFile};
-use crate::item::{Items, settings_document, settings_items};
+use crate::item::{ItemId, Items, settings_document, settings_items};
+use crate::json_edit::{self, Edit};
 use crate::paths::Paths;
 
 pub(crate) const SNAPSHOT_SETTINGS_FILE: &str = "settings.json";
@@ -50,4 +54,38 @@ pub(crate) fn snapshot_files(items: &Items) -> Result<Vec<SnapshotFile>> {
         path: SNAPSHOT_SETTINGS_FILE.to_owned(),
         content,
     }])
+}
+
+pub(crate) fn write_local(paths: &Paths, changes: &[(&ItemId, Option<&Value>)]) -> Result<()> {
+    let path = paths.settings_file();
+    let original = match fs::read_to_string(&path) {
+        Ok(text) => Some(text),
+        Err(err) if err.kind() == ErrorKind::NotFound => None,
+        Err(err) => return Err(err).with_context(|| format!("cannot read {}", path.display())),
+    };
+    let edits: Vec<Edit<'_>> = changes
+        .iter()
+        .map(|&(id, value)| Edit {
+            path: &id.path,
+            value,
+        })
+        .collect();
+    let edited = json_edit::apply(original.as_deref().unwrap_or("{}\n"), &edits)
+        .with_context(|| format!("cannot edit {}", path.display()))?;
+    if let Some(original) = &original {
+        backup(paths, "settings.json", original.as_bytes())?;
+    }
+    fs::create_dir_all(&paths.claude_dir)
+        .with_context(|| format!("cannot create {}", paths.claude_dir.display()))?;
+    atomic::write(&path, edited.as_bytes())
+}
+
+fn backup(paths: &Paths, name: &str, content: &[u8]) -> Result<()> {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_millis());
+    let dir = paths.backups_dir().join(stamp.to_string());
+    fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
+    let path = dir.join(name);
+    fs::write(&path, content).with_context(|| format!("cannot write the backup {}", path.display()))
 }

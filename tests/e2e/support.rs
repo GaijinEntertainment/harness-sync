@@ -29,13 +29,30 @@ impl Machine {
     }
 
     pub(crate) fn write_settings(&self, settings: &Value) {
+        self.write_settings_text(&(serde_json::to_string_pretty(settings).unwrap() + "\n"));
+    }
+
+    pub(crate) fn settings(&self) -> Value {
+        serde_json::from_str(&self.settings_text()).expect("settings.json is JSON")
+    }
+
+    pub(crate) fn settings_text(&self) -> String {
+        fs::read_to_string(self.settings_file()).expect("read settings.json")
+    }
+
+    pub(crate) fn write_settings_text(&self, text: &str) {
         let path = self.settings_file();
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(
-            &path,
-            serde_json::to_string_pretty(settings).unwrap() + "\n",
-        )
-        .unwrap();
+        fs::write(&path, text).unwrap();
+    }
+
+    pub(crate) fn backups(&self) -> Vec<String> {
+        let Ok(entries) = fs::read_dir(self.home().join(".cc-sync/backups")) else {
+            return Vec::new();
+        };
+        entries
+            .map(|entry| fs::read_to_string(entry.unwrap().path().join("settings.json")).unwrap())
+            .collect()
     }
 
     pub(crate) fn cc_sync(&self, args: &[&str]) -> Output {

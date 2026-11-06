@@ -6,8 +6,10 @@ mod config;
 mod git;
 mod init;
 mod item;
+mod json_edit;
 mod output;
 mod paths;
+mod pull;
 mod push;
 mod report;
 mod session;
@@ -20,11 +22,17 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::paths::Paths;
+use crate::pull::{Choices, Side, Take};
 use crate::report::Report;
 
 /// Sync the Claude Code user-level setup between machines through a git repo.
 #[derive(Debug, Parser)]
-#[command(version, about)]
+#[command(
+    version,
+    about,
+    after_help = "Exit codes: 0 success, 1 failure, 2 usage error, 3 pull stopped on conflicts, \
+                  4 push refused because the remote is ahead of the base commit"
+)]
 struct Cli {
     /// Print the report as JSON
     #[arg(long, global = true)]
@@ -47,6 +55,15 @@ enum Command {
     Status,
     /// Send the local setup to the remote snapshot
     Push,
+    /// Apply the remote snapshot to the local setup
+    Pull {
+        /// Side that wins every conflict without a --take
+        #[arg(long, value_enum)]
+        prefer: Option<Side>,
+        /// Side that wins the conflict of one item, as ITEM=local or ITEM=remote
+        #[arg(long = "take", value_name = "ITEM=SIDE", value_parser = pull::parse_take)]
+        takes: Vec<Take>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -68,5 +85,12 @@ fn execute(cli: &Cli) -> Result<Report> {
         Command::Init { remote, branch } => init::run(&paths, remote, branch),
         Command::Status => status::run(&paths),
         Command::Push => push::run(&paths),
+        Command::Pull { prefer, takes } => pull::run(
+            &paths,
+            &Choices {
+                prefer: *prefer,
+                takes,
+            },
+        ),
     }
 }
