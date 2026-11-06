@@ -214,3 +214,31 @@ fn pin_refuses_a_key_path_that_is_not_an_item() {
         1,
     );
 }
+
+#[test]
+fn pull_warns_about_an_executable_that_is_not_installed() {
+    let remote = Remote::new();
+    pushed(
+        &remote,
+        &json!({"hooks": {"Stop": [{"hooks": [
+            {"type": "command", "command": "sh -c true"},
+            {"type": "command", "command": "cc-sync-e2e-missing-tool --notify"}
+        ]}]}}),
+    );
+    let second = connected(&remote, &json!({}));
+
+    let (report, output) = second.cc_sync_json(&["pull"]);
+    let text = second.cc_sync(&["pull"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(
+        report["missing_executables"],
+        json!([{"id": "settings:/hooks/Stop/0/hooks/1/command", "executable": "cc-sync-e2e-missing-tool"}])
+    );
+    assert!(
+        String::from_utf8_lossy(&text.stderr)
+            .contains("warning: settings:/hooks/Stop/0/hooks/1/command runs"),
+        "stderr: {}",
+        String::from_utf8_lossy(&text.stderr)
+    );
+}

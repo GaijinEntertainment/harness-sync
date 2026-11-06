@@ -51,6 +51,7 @@ pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
         remote_commit,
         items: Vec::new(),
         secrets_found: Vec::new(),
+        missing_executables: Vec::new(),
         summary,
     })
 }

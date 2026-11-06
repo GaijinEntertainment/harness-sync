@@ -13,9 +13,24 @@ pub(crate) fn report(report: &Report, json: bool) -> Result<()> {
     } else {
         human(report)
     };
+    if !json {
+        warn_missing_executables(report);
+    }
     match io::stdout().lock().write_all(text.as_bytes()) {
         Err(err) if err.kind() != ErrorKind::BrokenPipe => Err(err.into()),
         _ => Ok(()),
+    }
+}
+
+fn warn_missing_executables(report: &Report) {
+    let mut stderr = io::stderr().lock();
+    for missing in &report.missing_executables {
+        // ignored: a warning that cannot reach stderr has no other channel
+        let _ = writeln!(
+            stderr,
+            "warning: {} runs `{}`, which is not installed on this machine",
+            missing.id, missing.executable
+        );
     }
 }
 
