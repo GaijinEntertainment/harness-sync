@@ -1,12 +1,60 @@
 //! cc-sync syncs the Claude Code user-level setup between machines through a git repo.
 
-use clap::Parser;
+mod atomic;
+mod config;
+mod git;
+mod init;
+mod output;
+mod paths;
+mod report;
+
+use std::process::ExitCode;
+
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+
+use crate::paths::Paths;
+use crate::report::Report;
 
 /// Sync the Claude Code user-level setup between machines through a git repo.
 #[derive(Debug, Parser)]
 #[command(version, about)]
-struct Cli {}
+struct Cli {
+    /// Print the report as JSON
+    #[arg(long, global = true)]
+    json: bool,
+    #[command(subcommand)]
+    command: Command,
+}
 
-fn main() {
-    Cli::parse();
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Connect this machine to the git repo that holds the remote snapshot
+    Init {
+        /// URL or path of the git remote
+        remote: String,
+        /// Branch that holds the remote snapshot
+        #[arg(long, default_value = "main")]
+        branch: String,
+    },
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let printed =
+        execute(&cli).and_then(|report| output::report(&report, cli.json).map(|()| report.outcome));
+    match printed {
+        Ok(outcome) => ExitCode::from(outcome.exit_code()),
+        Err(err) => {
+            output::error(&err);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn execute(cli: &Cli) -> Result<Report> {
+    let paths = Paths::from_env()?;
+    match &cli.command {
+        Command::Init { remote, branch } => init::run(&paths, remote, branch),
+    }
 }
