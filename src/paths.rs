@@ -8,6 +8,7 @@ use crate::item::Source;
 pub(crate) struct Paths {
     pub(crate) home: PathBuf,
     pub(crate) claude_dir: PathBuf,
+    claude_json: PathBuf,
     pub(crate) state_dir: PathBuf,
 }
 
@@ -15,10 +16,15 @@ impl Paths {
     pub(crate) fn from_env() -> Result<Self> {
         let home =
             std::env::home_dir().context("cannot determine the home directory of this user")?;
-        let claude_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
+        let config_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
             .filter(|dir| !dir.is_empty())
-            .map_or_else(|| home.join(".claude"), PathBuf::from);
+            .map(PathBuf::from);
+        let claude_json = config_dir
+            .as_ref()
+            .map_or_else(|| home.join(".claude.json"), |dir| dir.join(".claude.json"));
+        let claude_dir = config_dir.unwrap_or_else(|| home.join(".claude"));
         Ok(Self {
+            claude_json,
             claude_dir,
             state_dir: home.join(".cc-sync"),
             home,
@@ -28,6 +34,7 @@ impl Paths {
     pub(crate) fn json_file(&self, source: Source) -> PathBuf {
         match source {
             Source::Settings => self.claude_dir.join("settings.json"),
+            Source::Claude => self.claude_json.clone(),
         }
     }
 
