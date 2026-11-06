@@ -37,7 +37,7 @@ impl Backup {
 }
 
 pub(crate) fn load_local(paths: &Paths, git: &Git) -> Result<Items> {
-    let mut items = files::load_local(git, &paths.claude_dir)?;
+    let mut items = Items::new();
     for source in JSON_SOURCES {
         let path = paths.json_file(source);
         match fs::read(&path) {
@@ -46,6 +46,8 @@ pub(crate) fn load_local(paths: &Paths, git: &Git) -> Result<Items> {
             Err(err) => return Err(err).with_context(|| format!("cannot read {}", path.display())),
         }
     }
+    let files = files::load_local(git, paths, &items)?;
+    items.extend(files);
     Ok(items)
 }
 

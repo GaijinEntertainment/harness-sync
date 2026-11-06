@@ -19,16 +19,25 @@ impl Paths {
         let config_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
             .filter(|dir| !dir.is_empty())
             .map(PathBuf::from);
+        Ok(Self::new(home, config_dir))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_home(home: &std::path::Path) -> Self {
+        Self::new(home.to_path_buf(), None)
+    }
+
+    fn new(home: PathBuf, config_dir: Option<PathBuf>) -> Self {
         let claude_json = config_dir
             .as_ref()
             .map_or_else(|| home.join(".claude.json"), |dir| dir.join(".claude.json"));
         let claude_dir = config_dir.unwrap_or_else(|| home.join(".claude"));
-        Ok(Self {
+        Self {
             claude_json,
             claude_dir,
             state_dir: home.join(".cc-sync"),
             home,
-        })
+        }
     }
 
     pub(crate) fn json_file(&self, file: JsonFile) -> PathBuf {

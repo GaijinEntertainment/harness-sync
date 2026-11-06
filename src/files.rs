@@ -9,8 +9,8 @@ use crate::atomic;
 use crate::git::{Git, TreeChange};
 use crate::item::{ItemId, Items, KeyPath, Source};
 use crate::paths::Paths;
-use crate::secret;
 use crate::setup::Backup;
+use crate::{references, secret};
 
 const SNAPSHOT_DIR: &str = "files";
 const CATALOG_FILES: [&str; 2] = ["CLAUDE.md", "keybindings.json"];
@@ -26,7 +26,8 @@ const CATALOG_DIRS: [&str; 7] = [
 const SKIPPED_DIRS: [&str; 1] = ["skills/synced"];
 const SKIPPED_NAMES: [&str; 1] = [".DS_Store"];
 
-pub(crate) fn load_local(git: &Git, claude_dir: &Path) -> Result<Items> {
+pub(crate) fn load_local(git: &Git, paths: &Paths, json: &Items) -> Result<Items> {
+    let claude_dir = &paths.claude_dir;
     let mut relative = Vec::new();
     for name in CATALOG_FILES {
         if is_regular_file(&claude_dir.join(name))? {
@@ -36,6 +37,8 @@ pub(crate) fn load_local(git: &Git, claude_dir: &Path) -> Result<Items> {
     for dir in CATALOG_DIRS {
         walk(claude_dir, dir, &mut relative)?;
     }
+    let referenced = references::find(paths, json, &relative);
+    relative.extend(referenced);
     let absolute: Vec<PathBuf> = relative.iter().map(|path| claude_dir.join(path)).collect();
     let blobs = git.hash_files(&absolute)?;
     Ok(relative

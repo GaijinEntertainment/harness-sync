@@ -16,6 +16,7 @@ mod paths;
 mod pin;
 mod pull;
 mod push;
+mod references;
 mod report;
 mod secret;
 mod session;

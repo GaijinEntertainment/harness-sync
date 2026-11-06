@@ -112,3 +112,46 @@ fn a_token_in_an_authored_file_blocks_the_push() {
     assert_eq!(report["secrets_found"], json!(["file:rules/api.md"]));
     assert_eq!(remote.head("main"), None);
 }
+
+#[test]
+fn files_that_synced_items_reference_move_too() {
+    let remote = Remote::new();
+    let first = connected(&remote);
+    first.write_settings(
+        &json!({"statusLine": {"type": "command", "command": "~/.claude/statusline.sh"}}),
+    );
+    first.write_file(".claude/statusline.sh", "#!/bin/sh\necho status\n");
+    first.set_executable(".claude/statusline.sh");
+    first.write_file(
+        ".claude/CLAUDE.md",
+        "Read [the guide](guides/research.md).\n",
+    );
+    first.write_file(
+        ".claude/guides/research.md",
+        "Also @~/.claude/notes/extra.md\n",
+    );
+    first.write_file(".claude/notes/extra.md", "extra\n");
+    first.write_file(".claude/notes/unreferenced.md", "stays\n");
+    assert_exit(&first.cc_sync(&["push"]), 0);
+    let second = connected(&remote);
+
+    let output = second.cc_sync(&["pull"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(
+        second.read_file(".claude/statusline.sh").as_deref(),
+        Some("#!/bin/sh\necho status\n")
+    );
+    assert_eq!(second.is_executable(".claude/statusline.sh"), cfg!(unix));
+    assert_eq!(
+        second.read_file(".claude/guides/research.md").as_deref(),
+        Some("Also @~/.claude/notes/extra.md\n")
+    );
+    assert_eq!(
+        second.read_file(".claude/notes/extra.md").as_deref(),
+        Some("extra\n")
+    );
+    assert_eq!(second.read_file(".claude/notes/unreferenced.md"), None);
+    let (status, _) = second.cc_sync_json(&["status"]);
+    assert_eq!(status["items"], json!([]));
+}
