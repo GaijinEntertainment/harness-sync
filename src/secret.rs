@@ -12,6 +12,26 @@ use crate::item::{ItemId, Items, KeyPath};
 
 const PLACEHOLDER_PREFIX: &str = "<cc-sync secret ";
 
+const TOKEN_PREFIXES: [(&str, usize); 17] = [
+    ("sk-ant-", 20),
+    ("sk-proj-", 20),
+    ("ghp_", 30),
+    ("gho_", 30),
+    ("ghu_", 30),
+    ("ghs_", 30),
+    ("ghr_", 30),
+    ("github_pat_", 30),
+    ("glpat-", 20),
+    ("xoxb-", 20),
+    ("xoxp-", 20),
+    ("AKIA", 16),
+    ("AIza", 30),
+    ("npm_", 30),
+    ("hf_", 30),
+    ("pypi-", 30),
+    ("Bearer ", 20),
+];
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct MissingFile {
     missing: Vec<String>,
@@ -142,6 +162,80 @@ fn restore_value(
     }
 }
 
+pub(crate) fn scan(items: &Items) -> Vec<KeyPath> {
+    let mut found = Vec::new();
+    for (id, value) in items {
+        scan_value(value, &mut id.key_path(), &mut found);
+    }
+    found
+}
+
+pub(crate) fn redact(id: &ItemId, value: &Value) -> Value {
+    let mut redacted = value.clone();
+    let mut found = Vec::new();
+    scan_value(value, &mut id.key_path(), &mut found);
+    for key in found {
+        if let Some(text) = value_at_mut(&mut redacted, &key.path[id.path.len()..]) {
+            *text = Value::String(placeholder(&key));
+        }
+    }
+    redacted
+}
+
+fn scan_value(value: &Value, key: &mut KeyPath, found: &mut Vec<KeyPath>) {
+    match value {
+        Value::String(text) if !is_placeholder(text) && looks_like_token(text) => {
+            found.push(key.clone());
+        }
+        Value::Object(entries) => {
+            for (name, child) in entries {
+                key.path.push(name.clone());
+                scan_value(child, key, found);
+                key.path.pop();
+            }
+        }
+        Value::Array(elements) => {
+            for (index, child) in elements.iter().enumerate() {
+                key.path.push(index.to_string());
+                scan_value(child, key, found);
+                key.path.pop();
+            }
+        }
+        _ => {}
+    }
+}
+
+fn looks_like_token(text: &str) -> bool {
+    let is_token_char =
+        |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '+' | '/' | '=');
+    let prefixed = TOKEN_PREFIXES.iter().any(|&(prefix, length)| {
+        text.match_indices(prefix).any(|(start, _)| {
+            let at_boundary = text[..start]
+                .chars()
+                .next_back()
+                .is_none_or(|c| !c.is_ascii_alphanumeric());
+            at_boundary
+                && text[start + prefix.len()..]
+                    .chars()
+                    .take_while(|&c| is_token_char(c))
+                    .count()
+                    >= length
+        })
+    });
+    prefixed || text.contains("PRIVATE KEY-----") || is_jwt(text)
+}
+
+fn is_jwt(text: &str) -> bool {
+    text.split(|c: char| c.is_whitespace() || c == '"')
+        .any(|word| {
+            let parts: Vec<&str> = word.split('.').collect();
+            parts.len() == 3
+                && parts[0].starts_with("eyJ")
+                && parts[1].starts_with("eyJ")
+                && parts[2].len() >= 10
+        })
+}
+
 pub(crate) fn still_missing(
     missing: impl IntoIterator<Item = KeyPath>,
     setup: &Items,
@@ -229,6 +323,67 @@ mod tests {
 
         assert!(secret.iter().all(|key| is_secret_key(key)), "{secret:?}");
         assert!(!plain.iter().any(|key| is_secret_key(key)), "{plain:?}");
+    }
+
+    #[test]
+    fn the_scan_finds_token_like_strings_outside_placeholders() {
+        let tokens = [
+            "ghp_0123456789abcdefghijABCDEFGHIJ012345",
+            "Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+            "x sk-ant-api03-abcdefghijklmnopqrstuvwxyz y",
+            "AKIAABCDEFGHIJKLMNOP",
+            "-----BEGIN OPENSSH PRIVATE KEY-----",
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlMTIz",
+        ];
+        let plain = [
+            "ghp_short",
+            "/Users/me/.claude/statusline.sh",
+            "Bearer ${TOKEN}",
+            "task-ant-0123456789abcdefghijklmnop",
+            "<cc-sync secret settings:/env/GITHUB_TOKEN>",
+        ];
+
+        assert!(
+            tokens.iter().all(|text| looks_like_token(text)),
+            "{tokens:?}"
+        );
+        assert!(
+            !plain.iter().any(|text| looks_like_token(text)),
+            "{plain:?}"
+        );
+    }
+
+    #[test]
+    fn the_scan_reports_key_paths_and_skips_placeholders() {
+        let items = settings_items(json!({
+            "env": {"NOTE": "ghp_0123456789abcdefghijABCDEFGHIJ012345", "GITHUB_TOKEN": "<cc-sync secret settings:/env/GITHUB_TOKEN>"},
+            "hooks": {"Stop": [{"command": "curl -H 'Bearer abcdefghijklmnopqrstuvwxyz'"}]}
+        }))
+        .unwrap();
+
+        let found = scan(&items);
+
+        assert_eq!(
+            found,
+            [
+                key("settings:/env/NOTE"),
+                key("settings:/hooks/Stop/0/command")
+            ]
+        );
+    }
+
+    #[test]
+    fn redact_replaces_token_like_strings_with_their_placeholder() {
+        let id = key("settings:/statusLine").item();
+        let value =
+            json!({"command": "ghp_0123456789abcdefghijABCDEFGHIJ012345", "type": "command"});
+
+        let redacted = redact(&id, &value);
+
+        assert_eq!(
+            redacted,
+            json!({"command": "<cc-sync secret settings:/statusLine/command>", "type": "command"})
+        );
     }
 
     #[test]

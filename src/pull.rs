@@ -159,6 +159,7 @@ fn report(
         base_commit: session.base_commit.clone(),
         remote_commit: session.remote_commit.clone(),
         items: differences.iter().map(ItemReport::from).collect(),
+        secrets_found: Vec::new(),
         summary,
     }
 }

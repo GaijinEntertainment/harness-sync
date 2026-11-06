@@ -66,3 +66,17 @@ fn a_missing_secret_is_listed_and_is_not_a_local_deletion() {
         json!({"env": {"GITHUB_TOKEN": PLACEHOLDER}, "model": "opus"})
     );
 }
+
+#[test]
+fn a_token_outside_a_placeholder_blocks_the_push() {
+    let remote = Remote::new();
+    let machine = connected(&remote, &json!({"env": {"NOTE": TOKEN}, "model": "opus"}));
+
+    let (report, output) = machine.cc_sync_json(&["push"]);
+
+    assert_exit(&output, 5);
+    assert_eq!(report["outcome"], "secrets_found");
+    assert_eq!(report["secrets_found"], json!(["settings:/env/NOTE"]));
+    assert!(!String::from_utf8_lossy(&output.stdout).contains(TOKEN));
+    assert_eq!(remote.head("main"), None);
+}

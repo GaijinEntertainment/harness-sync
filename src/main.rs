@@ -32,7 +32,8 @@ use crate::report::Report;
     version,
     about,
     after_help = "Exit codes: 0 success, 1 failure, 2 usage error, 3 pull stopped on conflicts, \
-                  4 push refused because the remote is ahead of the base commit"
+                  4 push refused because the remote is ahead of the base commit, \
+                  5 push blocked by the secret scan"
 )]
 struct Cli {
     /// Print the report as JSON
