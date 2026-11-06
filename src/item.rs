@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
-use anyhow::{Result, bail};
+use anyhow::{Result, bail, ensure};
 use serde_json::{Map, Value};
 
 const SPLIT_SETTINGS_KEYS: [&str; 6] = [
@@ -92,12 +92,14 @@ impl JsonFile {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Source {
     Json(JsonFile),
+    File,
 }
 
 impl Source {
     const fn name(self) -> &'static str {
         match self {
             Self::Json(file) => file.name(),
+            Self::File => "file",
         }
     }
 
@@ -108,9 +110,16 @@ impl Source {
             .find(|source| source.name() == name)
     }
 
-    fn splits(self, key: &str) -> bool {
+    fn item_length(self, path: &[String]) -> usize {
         match self {
-            Self::Json(file) => file.splits(key),
+            Self::Json(file) => {
+                if path.first().is_some_and(|key| file.splits(key)) {
+                    2
+                } else {
+                    1
+                }
+            }
+            Self::File => path.len(),
         }
     }
 }
@@ -154,15 +163,13 @@ impl ItemId {
 
 impl ItemId {
     pub(crate) fn names_an_item(&self) -> bool {
-        let split = self.path.first().is_some_and(|key| self.source.splits(key));
-        self.path.len() == if split { 2 } else { 1 }
+        !self.path.is_empty() && self.path.len() == self.source.item_length(&self.path)
     }
 }
 
 impl KeyPath {
     pub(crate) fn item(&self) -> ItemId {
-        let split = self.path.first().is_some_and(|key| self.source.splits(key));
-        let length = if split { 2 } else { 1 };
+        let length = self.source.item_length(&self.path);
         ItemId {
             source: self.source,
             path: self.path.iter().take(length).cloned().collect(),
@@ -202,6 +209,9 @@ impl FromStr for KeyPath {
 
 fn write_pointer(f: &mut fmt::Formatter<'_>, source: Source, path: &[String]) -> fmt::Result {
     write!(f, "{}:", source.name())?;
+    if source == Source::File {
+        return write!(f, "{}", path.join("/"));
+    }
     for segment in path {
         write!(f, "/{}", segment.replace('~', "~0").replace('/', "~1"))?;
     }
@@ -209,6 +219,15 @@ fn write_pointer(f: &mut fmt::Formatter<'_>, source: Source, path: &[String]) ->
 }
 
 fn parse_pointer(text: &str) -> Result<(Source, Vec<String>)> {
+    if let Some(relative) = text.strip_prefix("file:") {
+        let path: Vec<String> = relative.split('/').map(str::to_owned).collect();
+        ensure!(
+            path.iter()
+                .all(|segment| !matches!(segment.as_str(), "" | "." | "..")),
+            "`{text}` is not a file item id; a file item id looks like `file:rules/NAME.md`"
+        );
+        return Ok((Source::File, path));
+    }
     let Some((source, pointer)) = text
         .split_once(':')
         .and_then(|(name, pointer)| Some((Source::from_name(name)?, pointer)))
@@ -386,6 +405,18 @@ mod tests {
             ItemId::settings(&["pluginConfigs", "p"])
         );
         assert_eq!(in_plain_key.item(), ItemId::settings(&["statusLine"]));
+    }
+
+    #[test]
+    fn a_file_item_id_is_its_relative_path() {
+        let id: ItemId = "file:skills/review/SKILL.md".parse().unwrap();
+
+        assert_eq!(id.source, Source::File);
+        assert_eq!(id.path, ["skills", "review", "SKILL.md"]);
+        assert_eq!(id.to_string(), "file:skills/review/SKILL.md");
+        assert!(id.names_an_item());
+        assert!("file:../x".parse::<ItemId>().is_err());
+        assert!("file:a//b".parse::<ItemId>().is_err());
     }
 
     #[test]

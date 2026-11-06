@@ -5,6 +5,7 @@ mod compare;
 mod config;
 mod declarations;
 mod executables;
+mod files;
 mod git;
 mod home;
 mod init;

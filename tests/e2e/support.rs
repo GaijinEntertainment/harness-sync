@@ -57,6 +57,54 @@ impl Machine {
         fs::write(&path, text).unwrap();
     }
 
+    pub(crate) fn is_executable(&self, relative: &str) -> bool {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::metadata(self.home().join(relative))
+                .is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = relative;
+            false
+        }
+    }
+
+    pub(crate) fn set_executable(&self, relative: &str) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(
+                self.home().join(relative),
+                fs::Permissions::from_mode(0o755),
+            )
+            .unwrap();
+        }
+        #[cfg(not(unix))]
+        let _ = relative;
+    }
+
+    pub(crate) fn backup_files(&self) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut dirs = vec![self.home().join(".cc-sync/backups")];
+        while let Some(dir) = dirs.pop() {
+            let Ok(entries) = fs::read_dir(&dir) else {
+                continue;
+            };
+            let (subdirs, files): (Vec<PathBuf>, Vec<PathBuf>) = entries
+                .map(|entry| entry.unwrap().path())
+                .partition(|path| path.is_dir());
+            dirs.extend(subdirs);
+            found.extend(
+                files
+                    .into_iter()
+                    .map(|file| fs::read_to_string(file).unwrap()),
+            );
+        }
+        found
+    }
+
     pub(crate) fn backups(&self) -> Vec<String> {
         let Ok(entries) = fs::read_dir(self.home().join(".cc-sync/backups")) else {
             return Vec::new();

@@ -1,18 +1,43 @@
 use std::fs;
 use std::io::ErrorKind;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 
-use crate::atomic;
-use crate::git::{Git, SnapshotFile};
+use crate::git::{Git, TreeChange};
 use crate::item::{Items, JSON_SOURCES, JsonFile, json_document, json_items};
 use crate::json_edit::{self, Edit};
 use crate::paths::Paths;
+use crate::{atomic, files};
 
-pub(crate) fn load_local(paths: &Paths) -> Result<Items> {
-    let mut items = Items::new();
+#[derive(Debug)]
+pub(crate) struct Backup {
+    dir: PathBuf,
+}
+
+impl Backup {
+    pub(crate) fn new(paths: &Paths) -> Self {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| since.as_millis());
+        Self {
+            dir: paths.backups_dir().join(stamp.to_string()),
+        }
+    }
+
+    pub(crate) fn save(&self, relative: &Path, content: &[u8]) -> Result<()> {
+        let path = self.dir.join(relative);
+        if let Some(dir) = path.parent() {
+            fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+        }
+        fs::write(&path, content)
+            .with_context(|| format!("cannot write the backup {}", path.display()))
+    }
+}
+
+pub(crate) fn load_local(paths: &Paths, git: &Git) -> Result<Items> {
+    let mut items = files::load_local(git, &paths.claude_dir)?;
     for source in JSON_SOURCES {
         let path = paths.json_file(source);
         match fs::read(&path) {
@@ -32,7 +57,7 @@ pub(crate) fn load_snapshot(git: &Git, commit: Option<&str>) -> Result<Items> {
         .iter()
         .map(|source| format!("{commit}:{}", source.snapshot_file()))
         .collect();
-    let mut items = Items::new();
+    let mut items = files::load_snapshot(git, commit)?;
     for ((source, spec), content) in JSON_SOURCES.iter().zip(&specs).zip(git.read_files(&specs)?) {
         if let Some(bytes) = content {
             items.extend(parse(*source, &bytes, Path::new(spec))?);
@@ -48,7 +73,7 @@ fn parse(file: JsonFile, bytes: &[u8], origin: &Path) -> Result<Items> {
         .with_context(|| format!("cannot read the items of {}", origin.display()))
 }
 
-pub(crate) fn snapshot_files(items: &Items) -> Result<Vec<SnapshotFile>> {
+pub(crate) fn json_changes(items: &Items) -> Result<Vec<TreeChange>> {
     JSON_SOURCES
         .iter()
         .map(|&source| {
@@ -60,15 +85,21 @@ pub(crate) fn snapshot_files(items: &Items) -> Result<Vec<SnapshotFile>> {
                     )
                 })?;
             content.push(b'\n');
-            Ok(SnapshotFile {
+            Ok(TreeChange::Write {
                 path: source.snapshot_file().to_owned(),
                 content,
+                executable: false,
             })
         })
         .collect()
 }
 
-pub(crate) fn write_local(paths: &Paths, file: JsonFile, edits: &[Edit<'_>]) -> Result<()> {
+pub(crate) fn write_local(
+    paths: &Paths,
+    backup: &Backup,
+    file: JsonFile,
+    edits: &[Edit<'_>],
+) -> Result<()> {
     let path = paths.json_file(file);
     let original = match fs::read_to_string(&path) {
         Ok(text) => Some(text),
@@ -78,23 +109,13 @@ pub(crate) fn write_local(paths: &Paths, file: JsonFile, edits: &[Edit<'_>]) -> 
     let edited = json_edit::apply(original.as_deref().unwrap_or("{}\n"), edits)
         .with_context(|| format!("cannot edit {}", path.display()))?;
     if let Some(original) = &original {
-        backup(paths, &path, original.as_bytes())?;
+        let name = path
+            .file_name()
+            .context("a Claude Code file has no file name")?;
+        backup.save(Path::new(name), original.as_bytes())?;
     }
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
     }
     atomic::write(&path, edited.as_bytes())
-}
-
-fn backup(paths: &Paths, file: &Path, content: &[u8]) -> Result<()> {
-    let name = file
-        .file_name()
-        .context("a Claude Code file has no file name")?;
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |since| since.as_millis());
-    let dir = paths.backups_dir().join(stamp.to_string());
-    fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
-    let path = dir.join(name);
-    fs::write(&path, content).with_context(|| format!("cannot write the backup {}", path.display()))
 }

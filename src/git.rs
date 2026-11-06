@@ -15,23 +15,47 @@ pub(crate) struct Git {
 }
 
 #[derive(Debug)]
-pub(crate) struct SnapshotFile {
-    pub(crate) path: String,
-    pub(crate) content: Vec<u8>,
+pub(crate) enum TreeChange {
+    Write {
+        path: String,
+        content: Vec<u8>,
+        executable: bool,
+    },
+    Delete {
+        path: String,
+    },
 }
 
-impl SnapshotFile {
+impl TreeChange {
     fn write_to(&self, stream: &mut Vec<u8>) -> Result<()> {
-        let path = &self.path;
+        let (Self::Write { path, .. } | Self::Delete { path }) = self;
         ensure!(
             !path.contains('\n') && !path.starts_with('"'),
             "cannot store the path {path:?} in the remote snapshot"
         );
-        stream.extend(format!("M 100644 inline {path}\ndata {}\n", self.content.len()).as_bytes());
-        stream.extend(&self.content);
-        stream.push(b'\n');
+        match self {
+            Self::Write {
+                content,
+                executable,
+                ..
+            } => {
+                let mode = if *executable { "100755" } else { "100644" };
+                stream
+                    .extend(format!("M {mode} inline {path}\ndata {}\n", content.len()).as_bytes());
+                stream.extend(content);
+                stream.push(b'\n');
+            }
+            Self::Delete { .. } => stream.extend(format!("D {path}\n").as_bytes()),
+        }
         Ok(())
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct TreeEntry {
+    pub(crate) path: String,
+    pub(crate) blob: String,
+    pub(crate) executable: bool,
 }
 
 pub(crate) fn remote_ref(branch: &str) -> String {
@@ -91,10 +115,42 @@ impl Git {
         parse_batch(&output.stdout, specs.len())
     }
 
+    pub(crate) fn list_files(&self, commit: &str, dir: &str) -> Result<Vec<TreeEntry>> {
+        let output = self.run(&["ls-tree", "-r", "-z", "--full-tree", commit, "--", dir])?;
+        parse_tree(&output.stdout)
+    }
+
+    pub(crate) fn hash_files(&self, files: &[PathBuf]) -> Result<Vec<String>> {
+        if files.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut input = Vec::new();
+        for file in files {
+            let path = file.to_str().with_context(|| {
+                format!("cannot hash {}: the path is not UTF-8", file.display())
+            })?;
+            input.extend(path.as_bytes());
+            input.push(b'\n');
+        }
+        let output =
+            self.run_with_input(&["hash-object", "--no-filters", "--stdin-paths"], input)?;
+        let blobs: Vec<String> = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        ensure!(
+            blobs.len() == files.len(),
+            "git hash-object returned {} ids for {} files",
+            blobs.len(),
+            files.len()
+        );
+        Ok(blobs)
+    }
+
     pub(crate) fn commit(
         &self,
         parent: Option<&str>,
-        files: &[SnapshotFile],
+        changes: &[TreeChange],
         message: &str,
     ) -> Result<String> {
         let mut stream = format!(
@@ -106,8 +162,8 @@ impl Git {
         if let Some(parent) = parent {
             stream.extend(format!("from {parent}\n").as_bytes());
         }
-        for file in files {
-            file.write_to(&mut stream)?;
+        for change in changes {
+            change.write_to(&mut stream)?;
         }
         self.run_with_input(&["fast-import", "--quiet", "--force"], stream)?;
         self.resolve(PENDING_REF)?
@@ -216,6 +272,32 @@ fn parse_batch(mut stream: &[u8], count: usize) -> Result<Vec<Option<Vec<u8>>>> 
     Ok(files)
 }
 
+fn parse_tree(stream: &[u8]) -> Result<Vec<TreeEntry>> {
+    let mut entries = Vec::new();
+    for record in stream
+        .split(|&byte| byte == 0)
+        .filter(|record| !record.is_empty())
+    {
+        let record =
+            std::str::from_utf8(record).context("git ls-tree printed a path that is not UTF-8")?;
+        let (meta, path) = record
+            .split_once('\t')
+            .with_context(|| format!("unexpected git ls-tree record `{record}`"))?;
+        let fields: Vec<&str> = meta.split(' ').collect();
+        let [mode, kind, blob] = fields[..] else {
+            bail!("unexpected git ls-tree record `{record}`");
+        };
+        if kind == "blob" {
+            entries.push(TreeEntry {
+                path: path.to_owned(),
+                blob: blob.to_owned(),
+                executable: mode == "100755",
+            });
+        }
+    }
+    Ok(entries)
+}
+
 fn run(mut command: Command, subcommand: &str) -> Result<Output> {
     let output = command
         .output()
@@ -232,6 +314,29 @@ fn run(mut command: Command, subcommand: &str) -> Result<Output> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tree_records_yield_blobs_with_their_mode() {
+        let stream = b"100644 blob aaa\tfiles/CLAUDE.md\x00100755 blob bbb\tfiles/hooks/x.sh\x00160000 commit ccc\tfiles/sub\x00";
+
+        let entries = parse_tree(stream).unwrap();
+
+        assert_eq!(
+            entries,
+            [
+                TreeEntry {
+                    path: "files/CLAUDE.md".to_owned(),
+                    blob: "aaa".to_owned(),
+                    executable: false
+                },
+                TreeEntry {
+                    path: "files/hooks/x.sh".to_owned(),
+                    blob: "bbb".to_owned(),
+                    executable: true
+                },
+            ]
+        );
+    }
 
     #[test]
     fn batch_output_yields_files_in_spec_order_and_none_for_missing_paths() {

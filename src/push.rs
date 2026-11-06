@@ -8,7 +8,7 @@ use crate::item::KeyPath;
 use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, short_commit};
 use crate::session::Session;
-use crate::{secret, setup};
+use crate::{files, secret, setup};
 
 pub(crate) fn run(paths: &Paths) -> Result<Report> {
     let session = Session::open(paths)?;
@@ -28,14 +28,20 @@ pub(crate) fn run(paths: &Paths) -> Result<Report> {
         ));
     }
     let outgoing = session.outgoing();
-    let found = secret::scan(&outgoing);
+    let mut changes = setup::json_changes(&outgoing)?;
+    changes.extend(files::changes(
+        &outgoing,
+        &session.three_way.remote,
+        &paths.claude_dir,
+    )?);
+    let mut found = secret::scan(&outgoing);
+    found.extend(files::token_like(&changes));
     if !found.is_empty() {
         return Ok(secrets_found(&session, &differences, &found));
     }
-    let files = setup::snapshot_files(&outgoing)?;
     let commit = session
         .git
-        .commit(session.remote_commit.as_deref(), &files, &message())?;
+        .commit(session.remote_commit.as_deref(), &changes, &message())?;
     if let Err(err) = session.git.push(&commit, &session.config.branch) {
         session.git.fetch()?;
         let remote_now = session

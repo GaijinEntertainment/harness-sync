@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::atomic;
-use crate::item::{ItemId, Items, KeyPath};
+use crate::item::{ItemId, Items, KeyPath, Source};
 
 const PLACEHOLDER_PREFIX: &str = "<cc-sync secret ";
 
@@ -69,9 +69,11 @@ pub(crate) fn local_view(
         .iter()
         .map(|(id, value)| {
             let mut value = value.clone();
-            let mut key = id.key_path();
-            let secret = is_secret_path(&key, declared);
-            mask(&mut value, &mut key, secret, declared);
+            if let Source::Json(_) = id.source {
+                let mut key = id.key_path();
+                let secret = is_secret_path(&key, declared);
+                mask(&mut value, &mut key, secret, declared);
+            }
             (id.clone(), value)
         })
         .collect();
@@ -258,7 +260,7 @@ fn scan_value(value: &Value, key: &mut KeyPath, found: &mut Vec<KeyPath>) {
     }
 }
 
-fn looks_like_token(text: &str) -> bool {
+pub(crate) fn looks_like_token(text: &str) -> bool {
     let is_token_char =
         |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '+' | '/' | '=');
     let prefixed = TOKEN_PREFIXES.iter().any(|&(prefix, length)| {

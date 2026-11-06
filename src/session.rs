@@ -9,7 +9,7 @@ use crate::declarations::Declarations;
 use crate::git::{self, BASE_REF, Git};
 use crate::item::{ItemId, Items, KeyPath};
 use crate::paths::Paths;
-use crate::{home, secret, setup};
+use crate::{files, home, secret, setup};
 
 #[derive(Debug)]
 pub(crate) struct Session {
@@ -33,17 +33,22 @@ impl Session {
         let base_commit = git.resolve(BASE_REF)?;
         let remote_commit = git.resolve(&git::remote_ref(&config.branch))?;
         let pins = config.pinned_items()?;
-        let local_setup = setup::load_local(paths)?;
+        let local_setup = setup::load_local(paths, &git)?;
         let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
         let declarations = Declarations::load(&git, remote_commit.as_deref())?;
         let mut local = secret::local_view(&local_setup, &missing_secrets, &declarations.secrets);
         for value in local.values_mut() {
             home::tokenize(value, &paths.home);
         }
+        let base = setup::load_snapshot(&git, base_commit.as_deref())?;
+        let remote = setup::load_snapshot(&git, remote_commit.as_deref())?;
+        if cfg!(not(unix)) {
+            files::carry_executable(&mut local, &[&base, &remote]);
+        }
         let three_way = ThreeWay {
-            base: setup::load_snapshot(&git, base_commit.as_deref())?,
+            base,
             local,
-            remote: setup::load_snapshot(&git, remote_commit.as_deref())?,
+            remote,
         };
         Ok(Self {
             config,

@@ -3,6 +3,8 @@
 #[cfg(test)]
 mod claude_json;
 #[cfg(test)]
+mod files;
+#[cfg(test)]
 mod init;
 #[cfg(test)]
 mod pull;
