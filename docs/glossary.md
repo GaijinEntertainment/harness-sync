@@ -83,8 +83,9 @@ but is not the snapshot).
 
 ### Base commit
 
-The remote snapshot commit that this machine's setup last matched. A successful pull and a successful push both set it.
-It is the common ancestor in the three-way comparison of each supported item.
+The remote snapshot commit that this machine last reconciled its setup with. A pull can keep local changes, so the setup
+can differ from it. A successful pull and a successful push both set it. It is the common ancestor in the three-way
+comparison of each supported item.
 
 **Avoid:** last pulled commit (a push also
 moves it); last sync (sync names the whole function, not one event).
