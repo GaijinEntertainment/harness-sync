@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 
 use crate::compare::ThreeWay;
 use crate::config::Config;
+use crate::declarations::Declarations;
 use crate::git::{self, BASE_REF, Git};
 use crate::item::{Items, KeyPath};
 use crate::paths::Paths;
@@ -31,9 +32,10 @@ impl Session {
         let remote_commit = git.resolve(&git::remote_ref(&config.branch))?;
         let local_setup = setup::load_local(paths)?;
         let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
+        let declarations = Declarations::load(&git, remote_commit.as_deref())?;
         let three_way = ThreeWay {
             base: setup::load_snapshot(&git, base_commit.as_deref())?,
-            local: secret::local_view(&local_setup, &missing_secrets),
+            local: secret::local_view(&local_setup, &missing_secrets, &declarations.secrets),
             remote: setup::load_snapshot(&git, remote_commit.as_deref())?,
         };
         Ok(Self {

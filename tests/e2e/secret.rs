@@ -114,3 +114,29 @@ fn secret_set_refuses_a_key_path_that_is_not_a_secret() {
     assert_exit(&output, 1);
     assert_eq!(machine.settings(), json!({"model": "opus"}));
 }
+
+#[test]
+fn a_key_path_that_the_repo_declares_is_a_secret() {
+    let remote = Remote::new();
+    remote.commit_file(
+        "main",
+        "cc-sync.toml",
+        "secrets = [\"settings:/env/INTERNAL_URL\"]\n",
+    );
+    let machine = connected(
+        &remote,
+        &json!({"env": {"INTERNAL_URL": "https://build.internal/hook"}}),
+    );
+    assert_exit(&machine.cc_sync(&["pull"]), 0);
+
+    let output = machine.cc_sync(&["push"]);
+
+    assert_exit(&output, 0);
+    assert!(!remote.all_objects().contains("build.internal"));
+    let snapshot: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+    assert_eq!(
+        snapshot["env"]["INTERNAL_URL"],
+        "<cc-sync secret settings:/env/INTERNAL_URL>"
+    );
+    assert!(remote.show("main:cc-sync.toml").contains("INTERNAL_URL"));
+}

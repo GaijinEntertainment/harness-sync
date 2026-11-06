@@ -60,13 +60,18 @@ fn is_secret_key(key: &str) -> bool {
             .any(|part| key.contains(part))
 }
 
-pub(crate) fn local_view(setup: &Items, missing: &BTreeSet<KeyPath>) -> Items {
+pub(crate) fn local_view(
+    setup: &Items,
+    missing: &BTreeSet<KeyPath>,
+    declared: &[KeyPath],
+) -> Items {
     let mut view: Items = setup
         .iter()
         .map(|(id, value)| {
             let mut value = value.clone();
-            let secret = id.path.iter().any(|segment| is_secret_key(segment));
-            mask(&mut value, &mut id.key_path(), secret);
+            let mut key = id.key_path();
+            let secret = is_secret_path(&key, declared);
+            mask(&mut value, &mut key, secret, declared);
             (id.clone(), value)
         })
         .collect();
@@ -76,20 +81,22 @@ pub(crate) fn local_view(setup: &Items, missing: &BTreeSet<KeyPath>) -> Items {
     view
 }
 
-fn mask(value: &mut Value, key: &mut KeyPath, secret: bool) {
+fn mask(value: &mut Value, key: &mut KeyPath, secret: bool, declared: &[KeyPath]) {
     match value {
         Value::String(text) if secret => *text = placeholder(key),
         Value::Object(entries) => {
             for (name, child) in entries {
                 key.path.push(name.clone());
-                mask(child, key, secret || is_secret_key(name));
+                let secret = secret || is_secret_key(name) || is_declared(key, declared);
+                mask(child, key, secret, declared);
                 key.path.pop();
             }
         }
         Value::Array(elements) => {
             for (index, child) in elements.iter_mut().enumerate() {
                 key.path.push(index.to_string());
-                mask(child, key, secret);
+                let secret = secret || is_declared(key, declared);
+                mask(child, key, secret, declared);
                 key.path.pop();
             }
         }
@@ -198,8 +205,14 @@ impl Restore<'_, '_> {
     }
 }
 
-pub(crate) fn is_secret_path(key: &KeyPath) -> bool {
-    key.path.iter().any(|segment| is_secret_key(segment))
+pub(crate) fn is_secret_path(key: &KeyPath, declared: &[KeyPath]) -> bool {
+    key.path.iter().any(|segment| is_secret_key(segment)) || is_declared(key, declared)
+}
+
+fn is_declared(key: &KeyPath, declared: &[KeyPath]) -> bool {
+    declared
+        .iter()
+        .any(|path| path.source == key.source && key.path.starts_with(&path.path))
 }
 
 pub(crate) fn scan(items: &Items) -> Vec<KeyPath> {
@@ -445,7 +458,34 @@ mod tests {
             }}}
         }))
         .unwrap();
-        assert_eq!(local_view(&setup, &BTreeSet::new()), view);
+        assert_eq!(local_view(&setup, &BTreeSet::new(), &[]), view);
+    }
+
+    #[test]
+    fn a_declared_key_path_makes_every_string_under_it_a_secret() {
+        let setup = settings_items(json!({
+            "env": {"INTERNAL_URL": "https://x"},
+            "pluginConfigs": {"p": {"options": {"url": "u", "port": 1}, "name": "n"}}
+        }))
+        .unwrap();
+        let declared = [
+            key("settings:/env/INTERNAL_URL"),
+            key("settings:/pluginConfigs/p/options"),
+        ];
+
+        let view = local_view(&setup, &BTreeSet::new(), &declared);
+
+        assert_eq!(
+            view,
+            settings_items(json!({
+                "env": {"INTERNAL_URL": "<cc-sync secret settings:/env/INTERNAL_URL>"},
+                "pluginConfigs": {"p": {
+                    "options": {"url": "<cc-sync secret settings:/pluginConfigs/p/options/url>", "port": 1},
+                    "name": "n"
+                }}
+            }))
+            .unwrap()
+        );
     }
 
     #[test]
@@ -456,7 +496,7 @@ mod tests {
             key("settings:/pluginConfigs/p/options/apiToken"),
         ]);
 
-        let view = local_view(&setup, &missing);
+        let view = local_view(&setup, &missing, &[]);
 
         assert_eq!(
             view,

@@ -3,6 +3,7 @@
 mod atomic;
 mod compare;
 mod config;
+mod declarations;
 mod git;
 mod init;
 mod item;
