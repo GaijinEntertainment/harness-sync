@@ -46,3 +46,7 @@ impl From<&Difference<'_>> for ItemReport {
         }
     }
 }
+
+pub(crate) fn short_commit(commit: &str) -> &str {
+    commit.get(..12).unwrap_or(commit)
+}
