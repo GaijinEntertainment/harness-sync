@@ -78,6 +78,15 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
             "the remote branch is empty: nothing to pull".to_owned(),
         ));
     };
+    let takes = if prompts {
+        ask_sides(&differences, choices)?
+    } else {
+        choices.takes.to_vec()
+    };
+    let choices = &Choices {
+        prefer: choices.prefer,
+        takes: &takes,
+    };
     let unresolved = differences
         .iter()
         .filter(|d| d.state == ItemState::Conflict && choices.side_for(d.id).is_none())
@@ -88,11 +97,11 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
         );
         return Ok(report(&session, &differences, Outcome::Conflicts, summary));
     }
-    let taken: Vec<&Difference<'_>> = differences
+    let from_remote: Vec<&Difference<'_>> = differences
         .iter()
         .filter(|d| takes_remote(d, choices))
         .collect();
-    let (setup_now, missing) = apply(paths, &session, &taken, prompts)?;
+    let (setup_now, missing) = apply(paths, &session, &from_remote, prompts)?;
     session.git.set_base(&remote_commit)?;
     let kept_local = differences
         .iter()
@@ -104,7 +113,7 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
     let summary = with_missing_secrets(
         format!(
             "applied {} remote changes; {kept_local} local changes remain for `cc-sync push`",
-            taken.len()
+            from_remote.len()
         ),
         missing.len(),
     );
@@ -117,10 +126,27 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
     Ok(pulled)
 }
 
+fn ask_sides(differences: &[Difference<'_>], choices: &Choices<'_>) -> Result<Vec<Take>> {
+    let mut takes = choices.takes.to_vec();
+    let open = differences
+        .iter()
+        .filter(|d| d.state == ItemState::Conflict && choices.side_for(d.id).is_none());
+    for difference in open {
+        let Some(side) = output::ask_side(&ItemReport::from(difference))? else {
+            break;
+        };
+        takes.push(Take {
+            id: difference.id.clone(),
+            side,
+        });
+    }
+    Ok(takes)
+}
+
 fn apply(
     paths: &Paths,
     session: &Session,
-    taken: &[&Difference<'_>],
+    from_remote: &[&Difference<'_>],
     prompts: bool,
 ) -> Result<(Items, BTreeSet<KeyPath>)> {
     let mut missing = session.missing_secrets.clone();
@@ -132,7 +158,7 @@ fn apply(
         }
     };
     let mut writes: Vec<(&ItemId, Option<Value>)> = Vec::new();
-    for difference in taken {
+    for difference in from_remote {
         let Some(remote) = difference.remote else {
             writes.push((difference.id, None));
             continue;
