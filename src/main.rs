@@ -1,12 +1,17 @@
 //! cc-sync syncs the Claude Code user-level setup between machines through a git repo.
 
 mod atomic;
+mod compare;
 mod config;
 mod git;
 mod init;
+mod item;
 mod output;
 mod paths;
 mod report;
+mod session;
+mod setup;
+mod status;
 
 use std::process::ExitCode;
 
@@ -37,6 +42,8 @@ enum Command {
         #[arg(long, default_value = "main")]
         branch: String,
     },
+    /// List the supported items that differ from the remote snapshot
+    Status,
 }
 
 fn main() -> ExitCode {
@@ -56,5 +63,6 @@ fn execute(cli: &Cli) -> Result<Report> {
     let paths = Paths::from_env()?;
     match &cli.command {
         Command::Init { remote, branch } => init::run(&paths, remote, branch),
+        Command::Status => status::run(&paths),
     }
 }

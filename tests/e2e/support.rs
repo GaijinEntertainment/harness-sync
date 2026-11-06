@@ -24,6 +24,20 @@ impl Machine {
         self.home.path()
     }
 
+    pub(crate) fn settings_file(&self) -> PathBuf {
+        self.home().join(".claude/settings.json")
+    }
+
+    pub(crate) fn write_settings(&self, settings: &Value) {
+        let path = self.settings_file();
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            serde_json::to_string_pretty(settings).unwrap() + "\n",
+        )
+        .unwrap();
+    }
+
     pub(crate) fn cc_sync(&self, args: &[&str]) -> Output {
         isolated(Command::new(env!("CARGO_BIN_EXE_cc-sync")), self.home())
             .args(args)

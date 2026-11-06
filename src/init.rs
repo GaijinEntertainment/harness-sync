@@ -3,7 +3,7 @@ use std::fs;
 use anyhow::{Context, Result, ensure};
 
 use crate::config::Config;
-use crate::git::{self, Git};
+use crate::git::{self, BASE_REF, Git};
 use crate::paths::Paths;
 use crate::report::{Outcome, Report};
 
@@ -45,7 +45,9 @@ pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
     Ok(Report {
         command: "init",
         outcome: Outcome::Ok,
+        base_commit: git.resolve(BASE_REF)?,
         remote_commit,
+        items: Vec::new(),
         summary,
     })
 }

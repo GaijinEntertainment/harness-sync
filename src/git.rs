@@ -1,7 +1,11 @@
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
+use std::thread;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
+
+pub(crate) const BASE_REF: &str = "refs/cc-sync/base";
 
 #[derive(Debug)]
 pub(crate) struct Git {
@@ -58,6 +62,34 @@ impl Git {
         ))
     }
 
+    pub(crate) fn read_files(&self, specs: &[String]) -> Result<Vec<Option<Vec<u8>>>> {
+        let mut child = self
+            .command(&["cat-file", "--batch"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("cannot run git; is it installed and on PATH?")?;
+        let mut stdin = child.stdin.take().context("cannot write to git cat-file")?;
+        let mut input = specs.join("\n");
+        input.push('\n');
+        let writer = thread::spawn(move || stdin.write_all(input.as_bytes()));
+        let output = child
+            .wait_with_output()
+            .context("cannot read from git cat-file")?;
+        writer
+            .join()
+            .map_err(|_| anyhow!("the writer to git cat-file panicked"))?
+            .context("cannot write to git cat-file")?;
+        if !output.status.success() {
+            bail!(
+                "git cat-file failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        parse_batch(&output.stdout, specs.len())
+    }
+
     fn command(&self, args: &[&str]) -> Command {
         let mut command = Command::new("git");
         command
@@ -77,6 +109,33 @@ impl Git {
     }
 }
 
+fn parse_batch(mut stream: &[u8], count: usize) -> Result<Vec<Option<Vec<u8>>>> {
+    let mut files = Vec::with_capacity(count);
+    for _ in 0..count {
+        let end = stream
+            .iter()
+            .position(|&byte| byte == b'\n')
+            .context("git cat-file output ended early")?;
+        let header = String::from_utf8_lossy(&stream[..end]);
+        stream = &stream[end + 1..];
+        if header.ends_with(" missing") {
+            files.push(None);
+            continue;
+        }
+        let size: usize = header
+            .rsplit(' ')
+            .next()
+            .and_then(|size| size.parse().ok())
+            .with_context(|| format!("unexpected git cat-file header `{header}`"))?;
+        let content = stream
+            .get(..size)
+            .context("git cat-file output ended inside a file")?;
+        files.push(Some(content.to_vec()));
+        stream = stream.get(size + 1..).unwrap_or_default();
+    }
+    Ok(files)
+}
+
 fn run(mut command: Command, subcommand: &str) -> Result<Output> {
     let output = command
         .output()
@@ -88,4 +147,23 @@ fn run(mut command: Command, subcommand: &str) -> Result<Output> {
         );
     }
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn batch_output_yields_files_in_spec_order_and_none_for_missing_paths() {
+        let stream = b"abc blob 3\none\nHEAD:gone missing\ndef blob 0\n\n";
+
+        let files = parse_batch(stream, 3).unwrap();
+
+        assert_eq!(files, [Some(b"one".to_vec()), None, Some(Vec::new())]);
+    }
+
+    #[test]
+    fn batch_output_that_ends_early_is_an_error() {
+        assert!(parse_batch(b"abc blob 10\nshort", 1).is_err());
+    }
 }
