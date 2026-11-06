@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::config::Config;
 use crate::declarations::Declarations;
 use crate::git::{self, Git};
-use crate::item::KeyPath;
+use crate::item::{KeyPath, Source};
 use crate::json_edit::Edit;
 use crate::output;
 use crate::paths::Paths;
@@ -25,9 +25,10 @@ pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report>
     } else {
         read_stdin()?
     };
+    let Source::Json(file) = key.source;
     setup::write_local(
         paths,
-        key.source,
+        file,
         &[Edit {
             path: &key.path,
             value: Some(&Value::String(value)),
@@ -46,7 +47,7 @@ pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report>
         missing_executables: Vec::new(),
         summary: format!(
             "set the secret {key} in {}",
-            paths.json_file(key.source).display()
+            paths.json_file(file).display()
         ),
     })
 }

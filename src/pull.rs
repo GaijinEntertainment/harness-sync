@@ -5,7 +5,7 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
-use crate::item::{ItemId, Items, JSON_SOURCES, KeyPath};
+use crate::item::{ItemId, Items, JSON_SOURCES, KeyPath, Source};
 use crate::json_edit::Edit;
 use crate::output;
 use crate::paths::Paths;
@@ -178,17 +178,17 @@ fn apply(
     let setup_now = if writes.is_empty() {
         session.local_setup.clone()
     } else {
-        for source in JSON_SOURCES {
+        for file in JSON_SOURCES {
             let edits: Vec<Edit<'_>> = writes
                 .iter()
-                .filter(|(id, _)| id.source == source)
+                .filter(|(id, _)| id.source == Source::Json(file))
                 .map(|(id, value)| Edit {
                     path: &id.path,
                     value: value.as_ref(),
                 })
                 .collect();
             if !edits.is_empty() {
-                setup::write_local(paths, source, &edits)?;
+                setup::write_local(paths, file, &edits)?;
             }
         }
         setup::load_local(paths)?
