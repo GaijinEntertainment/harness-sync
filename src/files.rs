@@ -25,8 +25,14 @@ const CATALOG_DIRS: [&str; 7] = [
 ];
 const SKIPPED_DIRS: [&str; 1] = ["skills/synced"];
 const SKIPPED_NAMES: [&str; 1] = [".DS_Store"];
+const CREDENTIALS_FILE: &str = ".credentials.json";
 
-pub(crate) fn load_local(git: &Git, paths: &Paths, json: &Items) -> Result<Items> {
+pub(crate) fn load_local(
+    git: &Git,
+    paths: &Paths,
+    json: &Items,
+    include: &[KeyPath],
+) -> Result<Items> {
     let claude_dir = &paths.claude_dir;
     let mut relative = Vec::new();
     for name in CATALOG_FILES {
@@ -37,8 +43,21 @@ pub(crate) fn load_local(git: &Git, paths: &Paths, json: &Items) -> Result<Items
     for dir in CATALOG_DIRS {
         walk(claude_dir, dir, &mut relative)?;
     }
+    for path in include.iter().filter(|path| path.source == Source::File) {
+        let included = path.path.join("/");
+        if included == CREDENTIALS_FILE {
+            continue;
+        }
+        if is_regular_file(&claude_dir.join(&included))? {
+            relative.push(included);
+        } else {
+            walk(claude_dir, &included, &mut relative)?;
+        }
+    }
     let referenced = references::find(paths, json, &relative);
     relative.extend(referenced);
+    relative.sort();
+    relative.dedup();
     let absolute: Vec<PathBuf> = relative.iter().map(|path| claude_dir.join(path)).collect();
     let blobs = git.hash_files(&absolute)?;
     Ok(relative

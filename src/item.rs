@@ -244,13 +244,21 @@ fn parse_pointer(text: &str) -> Result<(Source, Vec<String>)> {
     Ok((source, path))
 }
 
-pub(crate) fn json_items(file: JsonFile, document: Value) -> Result<Items> {
+pub(crate) fn json_items(file: JsonFile, document: Value, include: &[KeyPath]) -> Result<Items> {
     let source = Source::Json(file);
     let Value::Object(keys) = document else {
         bail!("the document does not hold a JSON object");
     };
+    let included = |key: &str| {
+        include.iter().any(|path| {
+            path.source == source && path.path.first().is_some_and(|first| first == key)
+        })
+    };
     let mut items = Items::new();
-    for (key, value) in keys.into_iter().filter(|(key, _)| file.holds(key)) {
+    for (key, value) in keys
+        .into_iter()
+        .filter(|(key, _)| file.holds(key) || included(key))
+    {
         match value {
             Value::Object(entries) if file.splits(&key) => {
                 for (name, entry) in entries {
@@ -267,7 +275,7 @@ pub(crate) fn json_items(file: JsonFile, document: Value) -> Result<Items> {
 
 #[cfg(test)]
 pub(crate) fn settings_items(document: Value) -> Result<Items> {
-    json_items(JsonFile::Settings, document)
+    json_items(JsonFile::Settings, document, &[])
 }
 
 pub(crate) fn json_document(items: &Items, file: JsonFile) -> Value {
@@ -308,7 +316,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn claude_json_gives_only_the_catalog_keys_and_one_item_per_mcp_server() {
+    fn claude_json_gives_the_catalog_and_included_keys_and_one_item_per_mcp_server() {
         let items = json_items(
             JsonFile::Claude,
             json!({
@@ -319,6 +327,7 @@ mod tests {
                 "theme": "dark",
                 "autoUpdates": false
             }),
+            &["claude:/numStartups".parse().unwrap()],
         )
         .unwrap();
 
@@ -329,6 +338,7 @@ mod tests {
                 "claude:/autoUpdates",
                 "claude:/mcpServers/kartta",
                 "claude:/mcpServers/web",
+                "claude:/numStartups",
                 "claude:/theme"
             ]
         );

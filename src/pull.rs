@@ -181,7 +181,7 @@ fn apply(
         session.local_setup.clone()
     } else {
         write(paths, &session.git, &writes)?;
-        setup::load_local(paths, &session.git)?
+        setup::load_local(paths, &session.git, &session.declarations)?
     };
     let missing = secret::still_missing(missing, &setup_now, &session.three_way.remote);
     if missing != session.missing_secrets {
