@@ -3,10 +3,11 @@ use std::collections::BTreeSet;
 use anyhow::{Context, Result};
 
 use crate::compare::ThreeWay;
+use crate::compare::{Difference, ItemState};
 use crate::config::Config;
 use crate::declarations::Declarations;
 use crate::git::{self, BASE_REF, Git};
-use crate::item::{Items, KeyPath};
+use crate::item::{ItemId, Items, KeyPath};
 use crate::paths::Paths;
 use crate::{home, secret, setup};
 
@@ -16,6 +17,7 @@ pub(crate) struct Session {
     pub(crate) git: Git,
     pub(crate) base_commit: Option<String>,
     pub(crate) remote_commit: Option<String>,
+    pub(crate) pins: BTreeSet<ItemId>,
     pub(crate) local_setup: Items,
     pub(crate) missing_secrets: BTreeSet<KeyPath>,
     pub(crate) three_way: ThreeWay,
@@ -30,6 +32,7 @@ impl Session {
         git.fetch()?;
         let base_commit = git.resolve(BASE_REF)?;
         let remote_commit = git.resolve(&git::remote_ref(&config.branch))?;
+        let pins = config.pinned_items()?;
         let local_setup = setup::load_local(paths)?;
         let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
         let declarations = Declarations::load(&git, remote_commit.as_deref())?;
@@ -47,9 +50,31 @@ impl Session {
             git,
             base_commit,
             remote_commit,
+            pins,
             local_setup,
             missing_secrets,
             three_way,
         })
+    }
+
+    pub(crate) fn differences(&self) -> Vec<Difference<'_>> {
+        let mut differences = self.three_way.differences();
+        for difference in &mut differences {
+            if self.pins.contains(difference.id) {
+                difference.state = ItemState::Pinned;
+            }
+        }
+        differences
+    }
+
+    pub(crate) fn outgoing(&self) -> Items {
+        let mut items = self.three_way.local.clone();
+        for id in &self.pins {
+            match self.three_way.remote.get(id) {
+                Some(value) => items.insert(id.clone(), value.clone()),
+                None => items.remove(id),
+            };
+        }
+        items
     }
 }

@@ -8,7 +8,7 @@ use crate::session::Session;
 
 pub(crate) fn run(paths: &Paths) -> Result<Report> {
     let session = Session::open(paths)?;
-    let differences = session.three_way.differences();
+    let differences = session.differences();
     let missing = secret::still_missing(
         session.missing_secrets.iter().cloned(),
         &session.local_setup,
@@ -35,9 +35,10 @@ fn summary(differences: &[Difference<'_>]) -> String {
     }
     let count = |state| differences.iter().filter(|d| d.state == state).count();
     format!(
-        "{} local changes, {} remote changes, {} conflicts",
+        "{} local changes, {} remote changes, {} conflicts, {} pinned",
         count(ItemState::LocalChange),
         count(ItemState::RemoteChange),
-        count(ItemState::Conflict)
+        count(ItemState::Conflict),
+        count(ItemState::Pinned)
     )
 }

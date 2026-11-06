@@ -2,7 +2,7 @@ use std::process::Command;
 
 use anyhow::Result;
 
-use crate::compare::Difference;
+use crate::compare::{Difference, ItemState};
 use crate::git;
 use crate::item::KeyPath;
 use crate::paths::Paths;
@@ -15,19 +15,24 @@ pub(crate) fn run(paths: &Paths) -> Result<Report> {
     if session.remote_commit != session.base_commit {
         return Ok(remote_ahead(&session));
     }
-    let differences = session.three_way.differences();
-    if differences.is_empty() {
+    let differences = session.differences();
+    let pushed_items = differences
+        .iter()
+        .filter(|d| d.state != ItemState::Pinned)
+        .count();
+    if pushed_items == 0 {
         return Ok(report(
             &session,
             &differences,
             "nothing to push: the local setup matches the remote snapshot".to_owned(),
         ));
     }
-    let found = secret::scan(&session.three_way.local);
+    let outgoing = session.outgoing();
+    let found = secret::scan(&outgoing);
     if !found.is_empty() {
         return Ok(secrets_found(&session, &differences, &found));
     }
-    let files = setup::snapshot_files(&session.three_way.local)?;
+    let files = setup::snapshot_files(&outgoing)?;
     let commit = session
         .git
         .commit(session.remote_commit.as_deref(), &files, &message())?;
@@ -43,8 +48,7 @@ pub(crate) fn run(paths: &Paths) -> Result<Report> {
     }
     session.git.set_base(&commit)?;
     let summary = format!(
-        "pushed {} items as commit {}",
-        differences.len(),
+        "pushed {pushed_items} items as commit {}",
         short_commit(&commit)
     );
     let mut pushed = report(&session, &differences, summary);

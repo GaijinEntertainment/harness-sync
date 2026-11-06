@@ -171,3 +171,46 @@ fn a_path_under_the_home_directory_follows_the_home_of_each_machine() {
     let (status, _) = first.cc_sync_json(&["status"]);
     assert_eq!(status["items"], json!([]));
 }
+
+#[test]
+fn a_pinned_item_moves_in_neither_direction() {
+    let remote = Remote::new();
+    let first = pushed(&remote, &json!({"model": "opus", "effortLevel": "high"}));
+    let second = connected(&remote, &json!({}));
+    assert_exit(&second.cc_sync(&["pull"]), 0);
+    assert_exit(&second.cc_sync(&["pin", "settings:/model"]), 0);
+    second.write_settings(&json!({"model": "sonnet", "effortLevel": "low"}));
+    assert_exit(&second.cc_sync(&["push"]), 0);
+    first.write_settings(&json!({"model": "haiku", "effortLevel": "low"}));
+    assert_exit(&first.cc_sync(&["pull"]), 0);
+    assert_exit(&first.cc_sync(&["push"]), 0);
+
+    let (report, output) = second.cc_sync_json(&["pull"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(
+        second.settings(),
+        json!({"model": "sonnet", "effortLevel": "low"})
+    );
+    assert_eq!(
+        report["items"],
+        json!([{"id": "settings:/model", "state": "pinned", "local": "sonnet", "remote": "haiku"}])
+    );
+    let snapshot: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+    assert_eq!(snapshot, json!({"model": "haiku", "effortLevel": "low"}));
+    assert_exit(&second.cc_sync(&["unpin", "settings:/model"]), 0);
+    let (status, _) = second.cc_sync_json(&["status"]);
+    assert_eq!(status["items"][0]["state"], "local_change");
+}
+
+#[test]
+fn pin_refuses_a_key_path_that_is_not_an_item() {
+    let remote = Remote::new();
+    let machine = connected(&remote, &json!({}));
+
+    assert_exit(&machine.cc_sync(&["pin", "settings:/env"]), 1);
+    assert_exit(
+        &machine.cc_sync(&["pin", "settings:/statusLine/command"]),
+        1,
+    );
+}

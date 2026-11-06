@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
@@ -6,11 +7,14 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::atomic;
+use crate::item::ItemId;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Config {
     pub(crate) remote: String,
     pub(crate) branch: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) pins: Vec<String>,
 }
 
 impl Config {
@@ -23,6 +27,14 @@ impl Config {
         toml::from_str(&text)
             .map(Some)
             .with_context(|| format!("cannot parse {}", path.display()))
+    }
+
+    pub(crate) fn pinned_items(&self) -> Result<BTreeSet<ItemId>> {
+        self.pins
+            .iter()
+            .map(|id| id.parse())
+            .collect::<Result<_>>()
+            .context("cannot parse the pins of the sync configuration")
     }
 
     pub(crate) fn save(&self, path: &Path) -> Result<()> {
