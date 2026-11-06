@@ -11,6 +11,7 @@ pub(crate) enum ItemState {
     LocalChange,
     RemoteChange,
     Conflict,
+    SecretMissing,
 }
 
 #[derive(Debug, PartialEq)]

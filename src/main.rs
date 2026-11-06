@@ -12,6 +12,7 @@ mod paths;
 mod pull;
 mod push;
 mod report;
+mod secret;
 mod session;
 mod setup;
 mod status;

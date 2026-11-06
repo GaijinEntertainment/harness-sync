@@ -44,13 +44,44 @@ impl ItemId {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct KeyPath {
+    pub(crate) source: Source,
+    pub(crate) path: Vec<String>,
+}
+
+impl ItemId {
+    pub(crate) fn key_path(&self) -> KeyPath {
+        KeyPath {
+            source: self.source,
+            path: self.path.clone(),
+        }
+    }
+}
+
+impl KeyPath {
+    pub(crate) fn item(&self) -> ItemId {
+        let split = self
+            .path
+            .first()
+            .is_some_and(|key| SPLIT_SETTINGS_KEYS.contains(&key.as_str()));
+        let length = if split { 2 } else { 1 };
+        ItemId {
+            source: self.source,
+            path: self.path.iter().take(length).cloned().collect(),
+        }
+    }
+}
+
 impl fmt::Display for ItemId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:", self.source.name())?;
-        for segment in &self.path {
-            write!(f, "/{}", segment.replace('~', "~0").replace('/', "~1"))?;
-        }
-        Ok(())
+        write_pointer(f, self.source, &self.path)
+    }
+}
+
+impl fmt::Display for KeyPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write_pointer(f, self.source, &self.path)
     }
 }
 
@@ -58,20 +89,40 @@ impl FromStr for ItemId {
     type Err = anyhow::Error;
 
     fn from_str(text: &str) -> Result<Self> {
-        let Some(("settings", pointer)) = text.split_once(':') else {
-            bail!("`{text}` is not an item id; an item id looks like `settings:/env/NAME`");
-        };
-        let Some(pointer) = pointer.strip_prefix('/') else {
-            bail!("the item id `{text}` needs a JSON pointer that starts with `/`");
-        };
-        Ok(Self {
-            source: Source::Settings,
-            path: pointer
-                .split('/')
-                .map(|segment| segment.replace("~1", "/").replace("~0", "~"))
-                .collect(),
-        })
+        let (source, path) = parse_pointer(text)?;
+        Ok(Self { source, path })
     }
+}
+
+impl FromStr for KeyPath {
+    type Err = anyhow::Error;
+
+    fn from_str(text: &str) -> Result<Self> {
+        let (source, path) = parse_pointer(text)?;
+        Ok(Self { source, path })
+    }
+}
+
+fn write_pointer(f: &mut fmt::Formatter<'_>, source: Source, path: &[String]) -> fmt::Result {
+    write!(f, "{}:", source.name())?;
+    for segment in path {
+        write!(f, "/{}", segment.replace('~', "~0").replace('/', "~1"))?;
+    }
+    Ok(())
+}
+
+fn parse_pointer(text: &str) -> Result<(Source, Vec<String>)> {
+    let Some(("settings", pointer)) = text.split_once(':') else {
+        bail!("`{text}` is not an item id; an item id looks like `settings:/env/NAME`");
+    };
+    let Some(pointer) = pointer.strip_prefix('/') else {
+        bail!("the item id `{text}` needs a JSON pointer that starts with `/`");
+    };
+    let path = pointer
+        .split('/')
+        .map(|segment| segment.replace("~1", "/").replace("~0", "~"))
+        .collect();
+    Ok((Source::Settings, path))
 }
 
 pub(crate) fn settings_items(document: Value) -> Result<Items> {
@@ -187,6 +238,20 @@ mod tests {
 
         assert_eq!(text, "settings:/skillOverrides/plugin:skill~1a~0b");
         assert_eq!(text.parse::<ItemId>().unwrap(), id);
+    }
+
+    #[test]
+    fn a_key_path_belongs_to_the_item_that_holds_it() {
+        let in_split_key: KeyPath = "settings:/pluginConfigs/p/options/apiToken"
+            .parse()
+            .unwrap();
+        let in_plain_key: KeyPath = "settings:/statusLine/command".parse().unwrap();
+
+        assert_eq!(
+            in_split_key.item(),
+            ItemId::settings(&["pluginConfigs", "p"])
+        );
+        assert_eq!(in_plain_key.item(), ItemId::settings(&["statusLine"]));
     }
 
     #[test]

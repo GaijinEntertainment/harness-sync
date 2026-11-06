@@ -1,10 +1,13 @@
+use std::collections::BTreeSet;
+
 use anyhow::{Context, Result};
 
 use crate::compare::ThreeWay;
 use crate::config::Config;
 use crate::git::{self, BASE_REF, Git};
+use crate::item::{Items, KeyPath};
 use crate::paths::Paths;
-use crate::setup;
+use crate::{secret, setup};
 
 #[derive(Debug)]
 pub(crate) struct Session {
@@ -12,6 +15,8 @@ pub(crate) struct Session {
     pub(crate) git: Git,
     pub(crate) base_commit: Option<String>,
     pub(crate) remote_commit: Option<String>,
+    pub(crate) local_setup: Items,
+    pub(crate) missing_secrets: BTreeSet<KeyPath>,
     pub(crate) three_way: ThreeWay,
 }
 
@@ -24,9 +29,11 @@ impl Session {
         git.fetch()?;
         let base_commit = git.resolve(BASE_REF)?;
         let remote_commit = git.resolve(&git::remote_ref(&config.branch))?;
+        let local_setup = setup::load_local(paths)?;
+        let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
         let three_way = ThreeWay {
             base: setup::load_snapshot(&git, base_commit.as_deref())?,
-            local: setup::load_local(paths)?,
+            local: secret::local_view(&local_setup, &missing_secrets),
             remote: setup::load_snapshot(&git, remote_commit.as_deref())?,
         };
         Ok(Self {
@@ -34,6 +41,8 @@ impl Session {
             git,
             base_commit,
             remote_commit,
+            local_setup,
+            missing_secrets,
             three_way,
         })
     }
