@@ -5,7 +5,7 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
-use crate::item::{ItemId, Items, KeyPath};
+use crate::item::{ItemId, Items, JSON_SOURCES, KeyPath};
 use crate::json_edit::Edit;
 use crate::output;
 use crate::paths::Paths;
@@ -178,14 +178,19 @@ fn apply(
     let setup_now = if writes.is_empty() {
         session.local_setup.clone()
     } else {
-        let edits: Vec<Edit<'_>> = writes
-            .iter()
-            .map(|(id, value)| Edit {
-                path: &id.path,
-                value: value.as_ref(),
-            })
-            .collect();
-        setup::write_local(paths, &edits)?;
+        for source in JSON_SOURCES {
+            let edits: Vec<Edit<'_>> = writes
+                .iter()
+                .filter(|(id, _)| id.source == source)
+                .map(|(id, value)| Edit {
+                    path: &id.path,
+                    value: value.as_ref(),
+                })
+                .collect();
+            if !edits.is_empty() {
+                setup::write_local(paths, source, &edits)?;
+            }
+        }
         setup::load_local(paths)?
     };
     let missing = secret::still_missing(missing, &setup_now, &session.three_way.remote);
