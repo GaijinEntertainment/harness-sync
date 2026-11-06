@@ -63,31 +63,40 @@ impl Git {
     }
 
     pub(crate) fn read_files(&self, specs: &[String]) -> Result<Vec<Option<Vec<u8>>>> {
+        let mut input = specs.join("\n");
+        input.push('\n');
+        let output = self.run_with_input(&["cat-file", "--batch"], input.into_bytes())?;
+        parse_batch(&output.stdout, specs.len())
+    }
+
+    fn run_with_input(&self, args: &[&str], input: Vec<u8>) -> Result<Output> {
+        let subcommand = args.first().copied().unwrap_or_default();
         let mut child = self
-            .command(&["cat-file", "--batch"])
+            .command(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .context("cannot run git; is it installed and on PATH?")?;
-        let mut stdin = child.stdin.take().context("cannot write to git cat-file")?;
-        let mut input = specs.join("\n");
-        input.push('\n');
-        let writer = thread::spawn(move || stdin.write_all(input.as_bytes()));
+        let mut stdin = child
+            .stdin
+            .take()
+            .with_context(|| format!("cannot write to git {subcommand}"))?;
+        let writer = thread::spawn(move || stdin.write_all(&input));
         let output = child
             .wait_with_output()
-            .context("cannot read from git cat-file")?;
+            .with_context(|| format!("cannot read from git {subcommand}"))?;
         writer
             .join()
-            .map_err(|_| anyhow!("the writer to git cat-file panicked"))?
-            .context("cannot write to git cat-file")?;
+            .map_err(|_| anyhow!("the writer to git {subcommand} panicked"))?
+            .with_context(|| format!("cannot write to git {subcommand}"))?;
         if !output.status.success() {
             bail!(
-                "git cat-file failed: {}",
+                "git {subcommand} failed: {}",
                 String::from_utf8_lossy(&output.stderr).trim()
             );
         }
-        parse_batch(&output.stdout, specs.len())
+        Ok(output)
     }
 
     fn command(&self, args: &[&str]) -> Command {
