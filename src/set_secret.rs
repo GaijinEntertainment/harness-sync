@@ -11,6 +11,7 @@ use crate::json_edit::Edit;
 use crate::output;
 use crate::paths::Paths;
 use crate::report::{Outcome, Report};
+use crate::setup::Backup;
 use crate::{secret, setup};
 
 pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report> {
@@ -25,9 +26,12 @@ pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report>
     } else {
         read_stdin()?
     };
-    let Source::Json(file) = key.source;
+    let Source::Json(file) = key.source else {
+        bail!("`{key}` is not a key path in a JSON file");
+    };
     setup::write_local(
         paths,
+        &Backup::new(paths),
         file,
         &[Edit {
             path: &key.path,

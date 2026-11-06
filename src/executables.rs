@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::item::{ItemId, Items};
+use crate::item::{ItemId, Items, Source};
 use crate::report::MissingExecutable;
 
 const SHELL_WORDS: [&str; 14] = [
@@ -23,7 +23,10 @@ pub(crate) fn missing(setup: &Items, home: &Path) -> Vec<MissingExecutable> {
 
 fn commands(setup: &Items) -> Vec<(String, String)> {
     let mut commands = Vec::new();
-    for (id, value) in setup {
+    for (id, value) in setup
+        .iter()
+        .filter(|(id, _)| matches!(id.source, Source::Json(_)))
+    {
         match id.path.first().map(String::as_str) {
             Some("statusLine" | "mcpServers") => {
                 push_command(&mut commands, id, &["command"], value);

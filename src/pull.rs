@@ -5,13 +5,15 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
+use crate::git::Git;
 use crate::item::{ItemId, Items, JSON_SOURCES, KeyPath, Source};
 use crate::json_edit::Edit;
 use crate::output;
 use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, with_missing_secrets};
 use crate::session::Session;
-use crate::{executables, home, secret, setup};
+use crate::setup::Backup;
+use crate::{executables, files, home, secret, setup};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Side {
@@ -178,26 +180,40 @@ fn apply(
     let setup_now = if writes.is_empty() {
         session.local_setup.clone()
     } else {
-        for file in JSON_SOURCES {
-            let edits: Vec<Edit<'_>> = writes
-                .iter()
-                .filter(|(id, _)| id.source == Source::Json(file))
-                .map(|(id, value)| Edit {
-                    path: &id.path,
-                    value: value.as_ref(),
-                })
-                .collect();
-            if !edits.is_empty() {
-                setup::write_local(paths, file, &edits)?;
-            }
-        }
-        setup::load_local(paths)?
+        write(paths, &session.git, &writes)?;
+        setup::load_local(paths, &session.git)?
     };
     let missing = secret::still_missing(missing, &setup_now, &session.three_way.remote);
     if missing != session.missing_secrets {
         secret::save_missing(&paths.missing_secrets_file(), &missing)?;
     }
     Ok((setup_now, missing))
+}
+
+fn write(paths: &Paths, git: &Git, writes: &[(&ItemId, Option<Value>)]) -> Result<()> {
+    let backup = Backup::new(paths);
+    for file in JSON_SOURCES {
+        let edits: Vec<Edit<'_>> = writes
+            .iter()
+            .filter(|(id, _)| id.source == Source::Json(file))
+            .map(|(id, value)| Edit {
+                path: &id.path,
+                value: value.as_ref(),
+            })
+            .collect();
+        if !edits.is_empty() {
+            setup::write_local(paths, &backup, file, &edits)?;
+        }
+    }
+    let file_writes: Vec<(&ItemId, Option<&Value>)> = writes
+        .iter()
+        .filter(|(id, _)| id.source == Source::File)
+        .map(|(id, value)| (*id, value.as_ref()))
+        .collect();
+    if !file_writes.is_empty() {
+        files::write_local(paths, git, &backup, &file_writes)?;
+    }
+    Ok(())
 }
 
 fn takes_remote(difference: &Difference<'_>, choices: &Choices<'_>) -> bool {
