@@ -7,12 +7,14 @@ use crate::compare::{Difference, ItemState};
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Outcome {
     Ok,
+    RemoteAhead,
 }
 
 impl Outcome {
     pub(crate) const fn exit_code(self) -> u8 {
         match self {
             Self::Ok => 0,
+            Self::RemoteAhead => 4,
         }
     }
 }

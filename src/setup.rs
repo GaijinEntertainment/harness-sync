@@ -4,8 +4,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::git::Git;
-use crate::item::{Items, settings_items};
+use crate::git::{Git, SnapshotFile};
+use crate::item::{Items, settings_document, settings_items};
 use crate::paths::Paths;
 
 pub(crate) const SNAPSHOT_SETTINGS_FILE: &str = "settings.json";
@@ -40,4 +40,14 @@ fn parse_settings(bytes: &[u8], origin: &Path) -> Result<Items> {
         .with_context(|| format!("{} is not valid JSON", origin.display()))?;
     settings_items(document)
         .with_context(|| format!("cannot read the items of {}", origin.display()))
+}
+
+pub(crate) fn snapshot_files(items: &Items) -> Result<Vec<SnapshotFile>> {
+    let mut content = serde_json::to_vec_pretty(&settings_document(items))
+        .context("cannot serialize the settings of the remote snapshot")?;
+    content.push(b'\n');
+    Ok(vec![SnapshotFile {
+        path: SNAPSHOT_SETTINGS_FILE.to_owned(),
+        content,
+    }])
 }

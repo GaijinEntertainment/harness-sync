@@ -8,6 +8,8 @@ use crate::setup;
 
 #[derive(Debug)]
 pub(crate) struct Session {
+    pub(crate) config: Config,
+    pub(crate) git: Git,
     pub(crate) base_commit: Option<String>,
     pub(crate) remote_commit: Option<String>,
     pub(crate) three_way: ThreeWay,
@@ -28,6 +30,8 @@ impl Session {
             remote: setup::load_snapshot(&git, remote_commit.as_deref())?,
         };
         Ok(Self {
+            config,
+            git,
             base_commit,
             remote_commit,
             three_way,

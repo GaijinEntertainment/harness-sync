@@ -8,6 +8,7 @@ mod init;
 mod item;
 mod output;
 mod paths;
+mod push;
 mod report;
 mod session;
 mod setup;
@@ -44,6 +45,8 @@ enum Command {
     },
     /// List the supported items that differ from the remote snapshot
     Status,
+    /// Send the local setup to the remote snapshot
+    Push,
 }
 
 fn main() -> ExitCode {
@@ -64,5 +67,6 @@ fn execute(cli: &Cli) -> Result<Report> {
     match &cli.command {
         Command::Init { remote, branch } => init::run(&paths, remote, branch),
         Command::Status => status::run(&paths),
+        Command::Push => push::run(&paths),
     }
 }
