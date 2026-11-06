@@ -4,6 +4,7 @@ mod atomic;
 mod compare;
 mod config;
 mod declarations;
+mod executables;
 mod git;
 mod home;
 mod init;

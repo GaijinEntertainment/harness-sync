@@ -5,13 +5,13 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
-use crate::item::{ItemId, KeyPath};
+use crate::item::{ItemId, Items, KeyPath};
 use crate::json_edit::Edit;
 use crate::output;
 use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, with_missing_secrets};
 use crate::session::Session;
-use crate::{home, secret, setup};
+use crate::{executables, home, secret, setup};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Side {
@@ -92,7 +92,7 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
         .iter()
         .filter(|d| takes_remote(d, choices))
         .collect();
-    let missing = apply(paths, &session, &taken, prompts)?;
+    let (setup_now, missing) = apply(paths, &session, &taken, prompts)?;
     session.git.set_base(&remote_commit)?;
     let kept_local = differences
         .iter()
@@ -112,6 +112,7 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
     pulled
         .items
         .extend(missing.iter().map(ItemReport::secret_missing));
+    pulled.missing_executables = executables::missing(&setup_now, &paths.home);
     pulled.base_commit = Some(remote_commit);
     Ok(pulled)
 }
@@ -121,7 +122,7 @@ fn apply(
     session: &Session,
     taken: &[&Difference<'_>],
     prompts: bool,
-) -> Result<BTreeSet<KeyPath>> {
+) -> Result<(Items, BTreeSet<KeyPath>)> {
     let mut missing = session.missing_secrets.clone();
     let mut ask = |key: &KeyPath| {
         if prompts {
@@ -165,7 +166,7 @@ fn apply(
     if missing != session.missing_secrets {
         secret::save_missing(&paths.missing_secrets_file(), &missing)?;
     }
-    Ok(missing)
+    Ok((setup_now, missing))
 }
 
 fn takes_remote(difference: &Difference<'_>, choices: &Choices<'_>) -> bool {
@@ -189,6 +190,7 @@ fn report(
         remote_commit: session.remote_commit.clone(),
         items: differences.iter().map(ItemReport::from).collect(),
         secrets_found: Vec::new(),
+        missing_executables: Vec::new(),
         summary,
     }
 }

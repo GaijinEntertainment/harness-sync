@@ -34,8 +34,16 @@ pub(crate) struct Report {
     pub(crate) items: Vec<ItemReport>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) secrets_found: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) missing_executables: Vec<MissingExecutable>,
     #[serde(skip)]
     pub(crate) summary: String,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct MissingExecutable {
+    pub(crate) id: String,
+    pub(crate) executable: String,
 }
 
 #[derive(Debug, Serialize)]

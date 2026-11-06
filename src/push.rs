@@ -65,6 +65,7 @@ fn report(session: &Session, differences: &[Difference<'_>], summary: String) ->
         remote_commit: session.remote_commit.clone(),
         items: differences.iter().map(ItemReport::from).collect(),
         secrets_found: Vec::new(),
+        missing_executables: Vec::new(),
         summary,
     }
 }
