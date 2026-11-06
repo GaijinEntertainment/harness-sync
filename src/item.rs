@@ -19,11 +19,35 @@ pub(crate) enum Source {
     Settings,
 }
 
+pub(crate) const JSON_SOURCES: [Source; 1] = [Source::Settings];
+
 impl Source {
     const fn name(self) -> &'static str {
         match self {
             Self::Settings => "settings",
         }
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        JSON_SOURCES
+            .into_iter()
+            .find(|source| source.name() == name)
+    }
+
+    pub(crate) const fn snapshot_file(self) -> &'static str {
+        match self {
+            Self::Settings => "settings.json",
+        }
+    }
+
+    const fn split_keys(self) -> &'static [&'static str] {
+        match self {
+            Self::Settings => &SPLIT_SETTINGS_KEYS,
+        }
+    }
+
+    fn splits(self, key: &str) -> bool {
+        self.split_keys().contains(&key)
     }
 }
 
@@ -36,11 +60,16 @@ pub(crate) struct ItemId {
 pub(crate) type Items = BTreeMap<ItemId, Value>;
 
 impl ItemId {
-    fn settings(path: &[&str]) -> Self {
+    fn new(source: Source, path: &[&str]) -> Self {
         Self {
-            source: Source::Settings,
+            source,
             path: path.iter().map(|&segment| segment.to_owned()).collect(),
         }
+    }
+
+    #[cfg(test)]
+    fn settings(path: &[&str]) -> Self {
+        Self::new(Source::Settings, path)
     }
 }
 
@@ -61,20 +90,14 @@ impl ItemId {
 
 impl ItemId {
     pub(crate) fn names_an_item(&self) -> bool {
-        let split = self
-            .path
-            .first()
-            .is_some_and(|key| SPLIT_SETTINGS_KEYS.contains(&key.as_str()));
+        let split = self.path.first().is_some_and(|key| self.source.splits(key));
         self.path.len() == if split { 2 } else { 1 }
     }
 }
 
 impl KeyPath {
     pub(crate) fn item(&self) -> ItemId {
-        let split = self
-            .path
-            .first()
-            .is_some_and(|key| SPLIT_SETTINGS_KEYS.contains(&key.as_str()));
+        let split = self.path.first().is_some_and(|key| self.source.splits(key));
         let length = if split { 2 } else { 1 };
         ItemId {
             source: self.source,
@@ -122,7 +145,10 @@ fn write_pointer(f: &mut fmt::Formatter<'_>, source: Source, path: &[String]) ->
 }
 
 fn parse_pointer(text: &str) -> Result<(Source, Vec<String>)> {
-    let Some(("settings", pointer)) = text.split_once(':') else {
+    let Some((source, pointer)) = text
+        .split_once(':')
+        .and_then(|(name, pointer)| Some((Source::from_name(name)?, pointer)))
+    else {
         bail!("`{text}` is not an item id; an item id looks like `settings:/env/NAME`");
     };
     let Some(pointer) = pointer.strip_prefix('/') else {
@@ -132,35 +158,38 @@ fn parse_pointer(text: &str) -> Result<(Source, Vec<String>)> {
         .split('/')
         .map(|segment| segment.replace("~1", "/").replace("~0", "~"))
         .collect();
-    Ok((Source::Settings, path))
+    Ok((source, path))
 }
 
-pub(crate) fn settings_items(document: Value) -> Result<Items> {
+pub(crate) fn json_items(source: Source, document: Value) -> Result<Items> {
     let Value::Object(keys) = document else {
-        bail!("settings.json does not hold a JSON object");
+        bail!("the document does not hold a JSON object");
     };
     let mut items = Items::new();
     for (key, value) in keys {
         match value {
-            Value::Object(entries) if SPLIT_SETTINGS_KEYS.contains(&key.as_str()) => {
+            Value::Object(entries) if source.splits(&key) => {
                 for (name, entry) in entries {
-                    items.insert(ItemId::settings(&[&key, &name]), entry);
+                    items.insert(ItemId::new(source, &[&key, &name]), entry);
                 }
             }
             value => {
-                items.insert(ItemId::settings(&[&key]), value);
+                items.insert(ItemId::new(source, &[&key]), value);
             }
         }
     }
     Ok(items)
 }
 
-pub(crate) fn settings_document(items: &Items) -> Value {
+#[cfg(test)]
+pub(crate) fn settings_items(document: Value) -> Result<Items> {
+    json_items(Source::Settings, document)
+}
+
+pub(crate) fn json_document(items: &Items, source: Source) -> Value {
     let mut document = Map::new();
-    for (id, value) in items {
-        match id.source {
-            Source::Settings => insert_at(&mut document, &id.path, value.clone()),
-        }
+    for (id, value) in items.iter().filter(|(id, _)| id.source == source) {
+        insert_at(&mut document, &id.path, value.clone());
     }
     Value::Object(document)
 }
@@ -234,7 +263,7 @@ mod tests {
             json!({"env": {"A": "1"}, "permissions": {"deny": ["Bash"]}, "model": "opus"});
         let items = settings_items(document.clone()).unwrap();
 
-        let rebuilt = settings_document(&items);
+        let rebuilt = json_document(&items, Source::Settings);
 
         assert_eq!(rebuilt, document);
         assert_eq!(settings_items(rebuilt).unwrap(), items);
