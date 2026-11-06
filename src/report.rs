@@ -11,6 +11,7 @@ pub(crate) enum Outcome {
     Ok,
     Conflicts,
     RemoteAhead,
+    SecretsFound,
 }
 
 impl Outcome {
@@ -19,6 +20,7 @@ impl Outcome {
             Self::Ok => 0,
             Self::Conflicts => 3,
             Self::RemoteAhead => 4,
+            Self::SecretsFound => 5,
         }
     }
 }
@@ -30,6 +32,8 @@ pub(crate) struct Report {
     pub(crate) base_commit: Option<String>,
     pub(crate) remote_commit: Option<String>,
     pub(crate) items: Vec<ItemReport>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) secrets_found: Vec<String>,
     #[serde(skip)]
     pub(crate) summary: String,
 }
@@ -47,8 +51,12 @@ impl From<&Difference<'_>> for ItemReport {
         Self {
             id: difference.id.to_string(),
             state: difference.state,
-            local: difference.local.cloned(),
-            remote: difference.remote.cloned(),
+            local: difference
+                .local
+                .map(|value| secret::redact(difference.id, value)),
+            remote: difference
+                .remote
+                .map(|value| secret::redact(difference.id, value)),
         }
     }
 }

@@ -4,10 +4,11 @@ use anyhow::Result;
 
 use crate::compare::Difference;
 use crate::git;
+use crate::item::KeyPath;
 use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, short_commit};
 use crate::session::Session;
-use crate::setup;
+use crate::{secret, setup};
 
 pub(crate) fn run(paths: &Paths) -> Result<Report> {
     let session = Session::open(paths)?;
@@ -21,6 +22,10 @@ pub(crate) fn run(paths: &Paths) -> Result<Report> {
             &differences,
             "nothing to push: the local setup matches the remote snapshot".to_owned(),
         ));
+    }
+    let found = secret::scan(&session.three_way.local);
+    if !found.is_empty() {
+        return Ok(secrets_found(&session, &differences, &found));
     }
     let files = setup::snapshot_files(&session.three_way.local)?;
     let commit = session
@@ -55,7 +60,22 @@ fn report(session: &Session, differences: &[Difference<'_>], summary: String) ->
         base_commit: session.base_commit.clone(),
         remote_commit: session.remote_commit.clone(),
         items: differences.iter().map(ItemReport::from).collect(),
+        secrets_found: Vec::new(),
         summary,
+    }
+}
+
+fn secrets_found(session: &Session, differences: &[Difference<'_>], found: &[KeyPath]) -> Report {
+    let paths: Vec<String> = found.iter().map(ToString::to_string).collect();
+    let summary = format!(
+        "push blocked: token-like values outside secret placeholders at {}; remove each value or keep it \
+         under a key that a secret name rule matches",
+        paths.join(", ")
+    );
+    Report {
+        outcome: Outcome::SecretsFound,
+        secrets_found: paths,
+        ..report(session, differences, summary)
     }
 }
 
