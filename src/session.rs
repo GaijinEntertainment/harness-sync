@@ -18,6 +18,7 @@ pub(crate) struct Session {
     pub(crate) base_commit: Option<String>,
     pub(crate) remote_commit: Option<String>,
     pub(crate) pins: BTreeSet<ItemId>,
+    pub(crate) declarations: Declarations,
     pub(crate) local_setup: Items,
     pub(crate) missing_secrets: BTreeSet<KeyPath>,
     pub(crate) three_way: ThreeWay,
@@ -33,15 +34,15 @@ impl Session {
         let base_commit = git.resolve(BASE_REF)?;
         let remote_commit = git.resolve(&git::remote_ref(&config.branch))?;
         let pins = config.pinned_items()?;
-        let local_setup = setup::load_local(paths, &git)?;
-        let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
         let declarations = Declarations::load(&git, remote_commit.as_deref())?;
+        let local_setup = setup::load_local(paths, &git, &declarations)?;
+        let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
         let mut local = secret::local_view(&local_setup, &missing_secrets, &declarations.secrets);
         for value in local.values_mut() {
             home::tokenize(value, &paths.home);
         }
-        let base = setup::load_snapshot(&git, base_commit.as_deref())?;
-        let remote = setup::load_snapshot(&git, remote_commit.as_deref())?;
+        let base = setup::load_snapshot(&git, base_commit.as_deref(), &declarations)?;
+        let remote = setup::load_snapshot(&git, remote_commit.as_deref(), &declarations)?;
         if cfg!(not(unix)) {
             files::carry_executable(&mut local, &[&base, &remote]);
         }
@@ -56,6 +57,7 @@ impl Session {
             base_commit,
             remote_commit,
             pins,
+            declarations,
             local_setup,
             missing_secrets,
             three_way,

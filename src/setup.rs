@@ -5,8 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 
+use crate::declarations::Declarations;
 use crate::git::{Git, TreeChange};
-use crate::item::{Items, JSON_SOURCES, JsonFile, json_document, json_items};
+use crate::item::{Items, JSON_SOURCES, JsonFile, KeyPath, json_document, json_items};
 use crate::json_edit::{self, Edit};
 use crate::paths::Paths;
 use crate::{atomic, files};
@@ -36,22 +37,28 @@ impl Backup {
     }
 }
 
-pub(crate) fn load_local(paths: &Paths, git: &Git) -> Result<Items> {
+pub(crate) fn load_local(paths: &Paths, git: &Git, declarations: &Declarations) -> Result<Items> {
     let mut items = Items::new();
     for source in JSON_SOURCES {
         let path = paths.json_file(source);
         match fs::read(&path) {
-            Ok(bytes) => items.extend(parse(source, &bytes, &path)?),
+            Ok(bytes) => items.extend(parse(source, &bytes, &path, &declarations.include)?),
             Err(err) if err.kind() == ErrorKind::NotFound => {}
             Err(err) => return Err(err).with_context(|| format!("cannot read {}", path.display())),
         }
     }
-    let files = files::load_local(git, paths, &items)?;
+    items.retain(|id, _| !declarations.excludes(id));
+    let files = files::load_local(git, paths, &items, &declarations.include)?;
     items.extend(files);
+    items.retain(|id, _| !declarations.excludes(id));
     Ok(items)
 }
 
-pub(crate) fn load_snapshot(git: &Git, commit: Option<&str>) -> Result<Items> {
+pub(crate) fn load_snapshot(
+    git: &Git,
+    commit: Option<&str>,
+    declarations: &Declarations,
+) -> Result<Items> {
     let Some(commit) = commit else {
         return Ok(Items::new());
     };
@@ -62,16 +69,22 @@ pub(crate) fn load_snapshot(git: &Git, commit: Option<&str>) -> Result<Items> {
     let mut items = files::load_snapshot(git, commit)?;
     for ((source, spec), content) in JSON_SOURCES.iter().zip(&specs).zip(git.read_files(&specs)?) {
         if let Some(bytes) = content {
-            items.extend(parse(*source, &bytes, Path::new(spec))?);
+            items.extend(parse(
+                *source,
+                &bytes,
+                Path::new(spec),
+                &declarations.include,
+            )?);
         }
     }
+    items.retain(|id, _| !declarations.excludes(id));
     Ok(items)
 }
 
-fn parse(file: JsonFile, bytes: &[u8], origin: &Path) -> Result<Items> {
+fn parse(file: JsonFile, bytes: &[u8], origin: &Path, include: &[KeyPath]) -> Result<Items> {
     let document = serde_json::from_slice(bytes)
         .with_context(|| format!("{} is not valid JSON", origin.display()))?;
-    json_items(file, document)
+    json_items(file, document, include)
         .with_context(|| format!("cannot read the items of {}", origin.display()))
 }
 
