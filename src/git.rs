@@ -2,14 +2,36 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 
 pub(crate) const BASE_REF: &str = "refs/cc-sync/base";
+const PENDING_REF: &str = "refs/cc-sync/pending";
 
 #[derive(Debug)]
 pub(crate) struct Git {
     git_dir: PathBuf,
+}
+
+#[derive(Debug)]
+pub(crate) struct SnapshotFile {
+    pub(crate) path: String,
+    pub(crate) content: Vec<u8>,
+}
+
+impl SnapshotFile {
+    fn write_to(&self, stream: &mut Vec<u8>) -> Result<()> {
+        let path = &self.path;
+        ensure!(
+            !path.contains('\n') && !path.starts_with('"'),
+            "cannot store the path {path:?} in the remote snapshot"
+        );
+        stream.extend(format!("M 100644 inline {path}\ndata {}\n", self.content.len()).as_bytes());
+        stream.extend(&self.content);
+        stream.push(b'\n');
+        Ok(())
+    }
 }
 
 pub(crate) fn remote_ref(branch: &str) -> String {
@@ -67,6 +89,55 @@ impl Git {
         input.push('\n');
         let output = self.run_with_input(&["cat-file", "--batch"], input.into_bytes())?;
         parse_batch(&output.stdout, specs.len())
+    }
+
+    pub(crate) fn commit(
+        &self,
+        parent: Option<&str>,
+        files: &[SnapshotFile],
+        message: &str,
+    ) -> Result<String> {
+        let mut stream = format!(
+            "commit {PENDING_REF}\ncommitter {}\ndata {}\n{message}\n",
+            self.committer(),
+            message.len()
+        )
+        .into_bytes();
+        if let Some(parent) = parent {
+            stream.extend(format!("from {parent}\n").as_bytes());
+        }
+        for file in files {
+            file.write_to(&mut stream)?;
+        }
+        self.run_with_input(&["fast-import", "--quiet", "--force"], stream)?;
+        self.resolve(PENDING_REF)?
+            .context("git fast-import did not create the snapshot commit")
+    }
+
+    pub(crate) fn push(&self, commit: &str, branch: &str) -> Result<()> {
+        self.run(&[
+            "push",
+            "--quiet",
+            "origin",
+            &format!("{commit}:refs/heads/{branch}"),
+        ])
+        .map(drop)
+    }
+
+    pub(crate) fn set_base(&self, commit: &str) -> Result<()> {
+        self.run(&["update-ref", BASE_REF, commit]).map(drop)
+    }
+
+    fn committer(&self) -> String {
+        self.run(&["var", "GIT_COMMITTER_IDENT"]).map_or_else(
+            |_| {
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_or(0, |since| since.as_secs());
+                format!("cc-sync <cc-sync@localhost> {now} +0000")
+            },
+            |output| String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+        )
     }
 
     fn run_with_input(&self, args: &[&str], input: Vec<u8>) -> Result<Output> {

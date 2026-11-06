@@ -83,6 +83,38 @@ impl Remote {
     pub(crate) fn path(&self) -> PathBuf {
         self.dir.path().join("remote.git")
     }
+
+    pub(crate) fn head(&self, branch: &str) -> Option<String> {
+        let output = self.git(&[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}"),
+        ]);
+        output
+            .status
+            .success()
+            .then(|| text(&output.stdout).trim().to_owned())
+    }
+
+    pub(crate) fn show(&self, rev_path: &str) -> String {
+        let output = self.git(&["show", rev_path]);
+        assert!(
+            output.status.success(),
+            "git show {rev_path}: {}",
+            text(&output.stderr)
+        );
+        text(&output.stdout)
+    }
+
+    pub(crate) fn git(&self, args: &[&str]) -> Output {
+        isolated(Command::new("git"), self.dir.path())
+            .arg("--git-dir")
+            .arg(self.path())
+            .args(args)
+            .output()
+            .expect("run git")
+    }
 }
 
 fn isolated(mut command: Command, home: &Path) -> Command {
