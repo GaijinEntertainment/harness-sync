@@ -117,9 +117,9 @@ Shared shapes that the phases build on:
 
 **Acceptance criteria:**
 
-- [ ] No key of `~/.claude.json` outside the catalog appears in the remote snapshot.
-- [ ] A referenced file syncs, and `exclude` removes it.
-- [ ] `CLAUDE_CONFIG_DIR` moves every Claude Code path that cc-sync reads and writes.
+- [x] No key of `~/.claude.json` outside the catalog appears in the remote snapshot.
+- [x] A referenced file syncs, and `exclude` removes it.
+- [x] `CLAUDE_CONFIG_DIR` moves every Claude Code path that cc-sync reads and writes.
 
 ## Phase 4: Plugin setup
 
@@ -127,7 +127,8 @@ Shared shapes that the phases build on:
 
 - Items — marketplace sources from `known_marketplaces.json`, one item per marketplace, without install locations.
 - Pull — `claude plugin marketplace add <source>` for a marketplace that the remote added, and
-  `claude plugin marketplace remove <name>` for one that the remote removed; a warning when `claude` is not on PATH.
+  `claude plugin marketplace remove <name>` for one that the remote removed, except one that settings declare; an error
+  that keeps the base commit when `claude` is not on PATH.
 
 **Testing strategy:**
 
@@ -141,8 +142,8 @@ Shared shapes that the phases build on:
 
 **Acceptance criteria:**
 
-- [ ] `installed_plugins.json` and the plugin cache never enter the remote snapshot.
-- [ ] A marketplace added on A is added on B through the `claude` CLI.
+- [x] `installed_plugins.json` and the plugin cache never enter the remote snapshot.
+- [x] A marketplace added on A is added on B through the `claude` CLI.
 
 ## Phase 5: Distribution and documentation
 
@@ -165,7 +166,7 @@ Shared shapes that the phases build on:
 **Acceptance criteria:**
 
 - [ ] A tag push produces three release binaries (verified once the GitHub repo exists).
-- [ ] The README documents every exit code and the JSON report shape.
+- [x] The README documents every exit code and the JSON report shape.
 
 ## Learning Tests
 
