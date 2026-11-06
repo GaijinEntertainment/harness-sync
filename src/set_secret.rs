@@ -3,6 +3,9 @@ use std::io::{self, IsTerminal};
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 
+use crate::config::Config;
+use crate::declarations::Declarations;
+use crate::git::{self, Git};
 use crate::item::KeyPath;
 use crate::json_edit::Edit;
 use crate::output;
@@ -13,8 +16,9 @@ use crate::{secret, setup};
 pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report> {
     let mut missing = secret::load_missing(&paths.missing_secrets_file())?;
     ensure!(
-        missing.contains(key) || secret::is_secret_path(key),
-        "`{key}` is not a secret key path: no secret name rule matches it, and pull did not record it as missing"
+        missing.contains(key) || secret::is_secret_path(key, &declared_secrets(paths)?),
+        "`{key}` is not a secret key path: no secret name rule matches it, cc-sync.toml in the repo does not declare it, \
+         and pull did not record it as missing"
     );
     let value = if prompts {
         output::ask_secret(key)?.context("no value entered")?
@@ -40,6 +44,15 @@ pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report>
         secrets_found: Vec::new(),
         summary: format!("set the secret {key} in settings.json"),
     })
+}
+
+fn declared_secrets(paths: &Paths) -> Result<Vec<KeyPath>> {
+    let Some(config) = Config::load(&paths.config_file())? else {
+        return Ok(Vec::new());
+    };
+    let git = Git::open(paths.repo_dir());
+    let remote_commit = git.resolve(&git::remote_ref(&config.branch))?;
+    Ok(Declarations::load(&git, remote_commit.as_deref())?.secrets)
 }
 
 fn read_stdin() -> Result<String> {

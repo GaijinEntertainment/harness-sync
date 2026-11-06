@@ -142,6 +142,41 @@ impl Remote {
         text(&output.stdout)
     }
 
+    pub(crate) fn commit_file(&self, branch: &str, path: &str, content: &str) {
+        let work = self.dir.path().join("work");
+        let run = |args: &[&str]| {
+            let output = isolated(Command::new("git"), self.dir.path())
+                .args(["-c", "user.name=Test", "-c", "user.email=test@example.com"])
+                .args(args)
+                .output()
+                .expect("run git");
+            assert!(
+                output.status.success(),
+                "git {args:?}: {}",
+                text(&output.stderr)
+            );
+        };
+        let work_dir = work.to_string_lossy().into_owned();
+        run(&["clone", "--quiet", &self.url(), &work_dir]);
+        if self.head(branch).is_some() {
+            run(&["-C", &work_dir, "checkout", "--quiet", branch]);
+        } else {
+            run(&["-C", &work_dir, "checkout", "--quiet", "--orphan", branch]);
+        }
+        fs::write(work.join(path), content).expect("write the file to commit");
+        run(&["-C", &work_dir, "add", path]);
+        run(&["-C", &work_dir, "commit", "--quiet", "-m", "add a file"]);
+        run(&[
+            "-C",
+            &work_dir,
+            "push",
+            "--quiet",
+            "origin",
+            &format!("HEAD:refs/heads/{branch}"),
+        ]);
+        fs::remove_dir_all(&work).expect("remove the work clone");
+    }
+
     pub(crate) fn all_objects(&self) -> String {
         text(
             &self
