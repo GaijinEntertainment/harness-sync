@@ -1,0 +1,60 @@
+[package]
+name = "cc-sync"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+description = "Sync the Claude Code user-level setup between machines through a git repo"
+license = "MIT"
+repository = "https://github.com/xobotyi/cc-sync"
+readme = "README.md"
+keywords = ["claude-code", "sync", "git", "cli", "config"]
+categories = ["command-line-utilities", "config"]
+
+[dependencies]
+clap = { version = "4.6.7", features = ["derive"] }
+
+[lints.rust]
+ambiguous_negative_literals = "warn"
+elided_lifetimes_in_paths = "warn"
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+redundant_imports = "warn"
+redundant_lifetimes = "warn"
+trivial_numeric_casts = "warn"
+unreachable_pub = "warn"
+unsafe_code = "forbid"
+unused_lifetimes = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+cognitive_complexity = "warn"
+excessive_nesting = "warn"
+expect_used = "warn"
+panic = "warn"
+unwrap_used = "warn"
+dbg_macro = "warn"
+print_stderr = "warn"
+print_stdout = "warn"
+todo = "warn"
+unimplemented = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+redundant_pub_crate = "allow"
+clone_on_ref_ptr = "warn"
+exit = "warn"
+mem_forget = "warn"
+rc_buffer = "warn"
+verbose_file_reads = "warn"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
