@@ -5,7 +5,6 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
-use crate::git::Git;
 use crate::item::{ItemId, Items, JSON_SOURCES, KeyPath, Source};
 use crate::json_edit::Edit;
 use crate::output;
@@ -13,7 +12,7 @@ use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, with_missing_secrets};
 use crate::session::Session;
 use crate::setup::Backup;
-use crate::{executables, files, home, secret, setup};
+use crate::{executables, files, home, marketplaces, secret, setup};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Side {
@@ -180,7 +179,7 @@ fn apply(
     let setup_now = if writes.is_empty() {
         session.local_setup.clone()
     } else {
-        write(paths, &session.git, &writes)?;
+        write(paths, session, &writes)?;
         setup::load_local(paths, &session.git, &session.declarations)?
     };
     let missing = secret::still_missing(missing, &setup_now, &session.three_way.remote);
@@ -190,7 +189,7 @@ fn apply(
     Ok((setup_now, missing))
 }
 
-fn write(paths: &Paths, git: &Git, writes: &[(&ItemId, Option<Value>)]) -> Result<()> {
+fn write(paths: &Paths, session: &Session, writes: &[(&ItemId, Option<Value>)]) -> Result<()> {
     let backup = Backup::new(paths);
     for file in JSON_SOURCES {
         let edits: Vec<Edit<'_>> = writes
@@ -211,8 +210,28 @@ fn write(paths: &Paths, git: &Git, writes: &[(&ItemId, Option<Value>)]) -> Resul
         .map(|(id, value)| (*id, value.as_ref()))
         .collect();
     if !file_writes.is_empty() {
-        files::write_local(paths, git, &backup, &file_writes)?;
+        files::write_local(paths, &session.git, &backup, &file_writes)?;
     }
+    let marketplace_changes: Vec<(&ItemId, Option<&Value>)> = writes
+        .iter()
+        .filter(|(id, _)| id.source == Source::Marketplace)
+        .map(|(id, value)| (*id, value.as_ref()))
+        .collect();
+    let mut setup_after = session.local_setup.clone();
+    for (id, value) in writes {
+        match value {
+            Some(value) => setup_after.insert((*id).clone(), value.clone()),
+            None => setup_after.remove(*id),
+        };
+    }
+    let declared = marketplaces::declared_names(&setup_after);
+    let failures = marketplaces::apply(paths, &marketplace_changes, &declared);
+    ensure!(
+        failures.is_empty(),
+        "pull wrote the other changes but did not move the base commit, because the plugin setup is incomplete; \
+         fix the cause and run `cc-sync pull` again:\n  {}",
+        failures.join("\n  ")
+    );
     Ok(())
 }
 
