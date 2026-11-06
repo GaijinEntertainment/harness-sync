@@ -5,7 +5,8 @@ use anyhow::Result;
 
 use crate::compare::ItemState;
 use crate::item::KeyPath;
-use crate::report::Report;
+use crate::pull::Side;
+use crate::report::{ItemReport, Report};
 
 pub(crate) fn report(report: &Report, json: bool) -> Result<()> {
     let text = if json {
@@ -41,6 +42,34 @@ pub(crate) fn can_prompt(no_input: bool) -> bool {
 pub(crate) fn ask_secret(key: &KeyPath) -> Result<Option<String>> {
     let value = rpassword::prompt_password(format!("value of the secret {key} (empty to skip): "))?;
     Ok(Some(value).filter(|value| !value.is_empty()))
+}
+
+pub(crate) fn ask_side(conflict: &ItemReport) -> Result<Option<Side>> {
+    let show = |value: Option<&serde_json::Value>| {
+        value.map_or_else(|| "(absent)".to_owned(), ToString::to_string)
+    };
+    let mut stderr = io::stderr().lock();
+    writeln!(
+        stderr,
+        "conflict: {}\n  local:  {}\n  remote: {}",
+        conflict.id,
+        show(conflict.local.as_ref()),
+        show(conflict.remote.as_ref())
+    )?;
+    loop {
+        write!(stderr, "keep local or take remote? [l/r, empty to stop]: ")?;
+        stderr.flush()?;
+        let mut answer = String::new();
+        if io::stdin().read_line(&mut answer)? == 0 {
+            return Ok(None);
+        }
+        match answer.trim() {
+            "" => return Ok(None),
+            "l" | "local" => return Ok(Some(Side::Local)),
+            "r" | "remote" => return Ok(Some(Side::Remote)),
+            _ => {}
+        }
+    }
 }
 
 pub(crate) fn error(err: &anyhow::Error) {
