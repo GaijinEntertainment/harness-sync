@@ -147,3 +147,27 @@ fn pull_from_an_empty_remote_writes_nothing() {
     assert_eq!(report["items"], json!([]));
     assert_eq!(machine.backups(), Vec::<String>::new());
 }
+
+#[test]
+fn a_path_under_the_home_directory_follows_the_home_of_each_machine() {
+    let remote = Remote::new();
+    let first = Machine::new();
+    let command =
+        |machine: &Machine| format!("bash {}/.claude/statusline.sh", machine.home().display());
+    first.write_settings(&json!({"statusLine": {"type": "command", "command": command(&first)}}));
+    assert_exit(&first.cc_sync(&["init", &remote.url()]), 0);
+    assert_exit(&first.cc_sync(&["push"]), 0);
+    let second = connected(&remote, &json!({}));
+
+    let output = second.cc_sync(&["pull"]);
+
+    assert_exit(&output, 0);
+    let snapshot: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+    assert_eq!(
+        snapshot["statusLine"]["command"],
+        "bash <cc-sync home>/.claude/statusline.sh"
+    );
+    assert_eq!(second.settings()["statusLine"]["command"], command(&second));
+    let (status, _) = first.cc_sync_json(&["status"]);
+    assert_eq!(status["items"], json!([]));
+}

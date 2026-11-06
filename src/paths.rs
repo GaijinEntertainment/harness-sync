@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 
 #[derive(Debug)]
 pub(crate) struct Paths {
+    pub(crate) home: PathBuf,
     pub(crate) claude_dir: PathBuf,
     pub(crate) state_dir: PathBuf,
 }
@@ -18,6 +19,7 @@ impl Paths {
         Ok(Self {
             claude_dir,
             state_dir: home.join(".cc-sync"),
+            home,
         })
     }
 

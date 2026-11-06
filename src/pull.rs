@@ -11,7 +11,7 @@ use crate::output;
 use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, with_missing_secrets};
 use crate::session::Session;
-use crate::{secret, setup};
+use crate::{home, secret, setup};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Side {
@@ -137,7 +137,8 @@ fn apply(
             &mut ask,
         )?;
         missing.extend(restored.missing);
-        if let Some(value) = restored.value {
+        if let Some(mut value) = restored.value {
+            home::expand(&mut value, &paths.home);
             writes.push((difference.id, Some(value)));
         }
     }
