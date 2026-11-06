@@ -16,8 +16,8 @@ Shared shapes that the phases build on:
 - **Remote snapshot layout.** `settings.json` and `claude.json` hold the catalog keys of the two Claude Code files after
   value rewriting; `files/` mirrors the authored files; `plugins/marketplaces.json` holds the marketplace sources;
   `cc-sync.toml` holds the repo's `include`, `exclude`, and secret key paths.
-- **Machine-local state.** `~/.cc-sync/config.toml` (remote, branch, pins), `~/.cc-sync/repo/` (the local clone), the
-  base commit as the ref `refs/cc-sync/base` in the local clone, and `~/.cc-sync/backups/<timestamp>/`.
+- **Machine-local state.** `~/.cc-sync/config.toml` (remote, branch, pins), `~/.cc-sync/repo.git` (the local clone, a
+  bare repo), the base commit as the ref `refs/cc-sync/base` in the local clone, and `~/.cc-sync/backups/<timestamp>/`.
 - **Item state.** One enum: unchanged, local change, remote change, conflict, pinned, secret missing. Deletions are
   changes with an absent side.
 - **Exit codes.** 0 success; 1 failure; 2 usage error; 3 pull stopped on conflicts; 4 push refused because the remote is
@@ -53,12 +53,12 @@ Shared shapes that the phases build on:
 
 **Acceptance criteria:**
 
-- [ ] `cc-sync init` on a machine with an empty remote, then `push`, creates the first remote snapshot commit.
-- [ ] `cc-sync pull --prefer remote` on a second machine writes the remote keys into its `settings.json`.
-- [ ] A key changed on both machines stops `pull` with exit code 3 and lists the item; `--take` resolves it.
-- [ ] `push` refuses with exit code 4 when the remote has commits after the base commit.
-- [ ] `status --json` prints the item list with item ids and item states.
-- [ ] Each pull that writes a file leaves a backup copy in `~/.cc-sync/backups/`.
+- [x] `cc-sync init` on a machine with an empty remote, then `push`, creates the first remote snapshot commit.
+- [x] `cc-sync pull --prefer remote` on a second machine writes the remote keys into its `settings.json`.
+- [x] A key changed on both machines stops `pull` with exit code 3 and lists the item; `--take` resolves it.
+- [x] `push` refuses with exit code 4 when the remote has commits after the base commit.
+- [x] `status --json` prints the item list with item ids and item states.
+- [x] Each pull that writes a file leaves a backup copy in `~/.cc-sync/backups/`.
 
 ## Phase 2: Secrets, home-path token, pins, executable warnings
 
