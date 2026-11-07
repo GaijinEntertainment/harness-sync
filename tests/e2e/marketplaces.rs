@@ -75,13 +75,13 @@ fn a_declared_marketplace_reaches_the_other_machine_as_settings_alone() {
         r#"{"version": 2, "plugins": {"x@acme": []}}"#,
     );
     first.write_file(".claude/plugins/cache/acme/x/1.0.0/plugin.json", "{}");
-    assert_exit(&first.cc_sync(&["init", &remote.url()]), 0);
-    assert_exit(&first.cc_sync(&["push"]), 0);
+    assert_exit(&first.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
     let second = Machine::new();
-    assert_exit(&second.cc_sync(&["init", &remote.url()]), 0);
+    assert_exit(&second.harness_sync(&["init", &remote.url()]), 0);
     let bin = Bin::with_fake_claude();
 
-    let output = second.cc_sync_with_path(&bin.path(), &["pull"]);
+    let output = second.harness_sync_with_path(&bin.path(), &["pull"]);
 
     assert_exit(&output, 0);
     assert_eq!(bin.log(), "");
@@ -99,7 +99,7 @@ fn status_and_push_warn_about_a_marketplace_that_settings_do_not_declare() {
     let remote = Remote::new();
     remote.commit_file(
         "main",
-        "cc-sync.toml",
+        "harness-sync.toml",
         "exclude = [\"settings:/extraKnownMarketplaces/hidden\"]\n",
     );
     let first = Machine::new();
@@ -112,11 +112,11 @@ fn status_and_push_warn_about_a_marketplace_that_settings_do_not_declare() {
             1,
         ),
     );
-    assert_exit(&first.cc_sync(&["init", &remote.url()]), 0);
-    assert_exit(&first.cc_sync(&["pull"]), 0);
+    assert_exit(&first.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&first.harness_sync(&["pull"]), 0);
 
-    let (status, _) = first.cc_sync_json(&["status"]);
-    let pushed = first.cc_sync(&["push"]);
+    let (status, _) = first.harness_sync_json(&["status"]);
+    let pushed = first.harness_sync(&["push"]);
 
     assert_eq!(
         status["undeclared_marketplaces"],

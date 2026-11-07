@@ -40,10 +40,10 @@ pub(crate) fn run(paths: &Paths, name: &str, target: Target) -> Result<Report> {
     config.save(&config_file)?;
     let remote_commit = git.resolve(&git::remote_ref(&config.primary, &branch))?;
     let summary = remote_commit.as_deref().map_or_else(
-        || format!("connected to {remote}; branch {branch} is empty: run `cc-sync push` to create it"),
+        || format!("connected to {remote}; branch {branch} is empty: run `harness-sync push` to create it"),
         |commit| {
             format!(
-                "connected to {remote}; branch {branch} is at {}: run `cc-sync pull --prefer remote` to take it",
+                "connected to {remote}; branch {branch} is at {}: run `harness-sync pull --prefer remote` to take it",
                 short_commit(commit)
             )
         },

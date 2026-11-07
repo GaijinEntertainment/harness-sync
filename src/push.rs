@@ -38,7 +38,7 @@ fn chosen_targets(config: &Config, to: &[String]) -> Result<Vec<String>> {
         for name in to {
             ensure!(
                 config.targets.contains_key(name),
-                "there is no target `{name}`; add it with `cc-sync target add`"
+                "there is no target `{name}`; add it with `harness-sync target add`"
             );
         }
         to.to_vec()
@@ -184,7 +184,7 @@ fn remote_ahead(session: &Session) -> Report {
         ..report(
             session,
             &[],
-            "the remote snapshot has commits that this machine has not pulled: run `cc-sync pull` first"
+            "the remote snapshot has commits that this machine has not pulled: run `harness-sync pull` first"
                 .to_owned(),
         )
     }
@@ -198,7 +198,7 @@ fn subject() -> String {
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
         .filter(|host| !host.is_empty())
         .map_or_else(
-            || "cc-sync push".to_owned(),
-            |host| format!("cc-sync push from {host}"),
+            || "harness-sync push".to_owned(),
+            |host| format!("harness-sync push from {host}"),
         )
 }

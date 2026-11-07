@@ -18,7 +18,7 @@ pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report>
     let mut missing = secret::load_missing(&paths.missing_secrets_file())?;
     ensure!(
         missing.contains(key) || secret::is_secret_path(key, &declared_secrets(paths)?),
-        "`{key}` is not a secret key path: no secret name rule matches it, cc-sync.toml in the repo does not declare it, \
+        "`{key}` is not a secret key path: no secret name rule matches it, harness-sync.toml in the repo does not declare it, \
          and pull did not record it as missing"
     );
     let value = if prompts {

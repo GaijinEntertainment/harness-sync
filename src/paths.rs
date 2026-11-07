@@ -35,7 +35,7 @@ impl Paths {
         Self {
             claude_json,
             claude_dir,
-            state_dir: home.join(".cc-sync"),
+            state_dir: home.join(".harness-sync"),
             home,
         }
     }

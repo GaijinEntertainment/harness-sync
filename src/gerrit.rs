@@ -52,7 +52,7 @@ mod tests {
     #[test]
     fn the_change_url_comes_from_the_remote_messages_of_gerrit() {
         let messages = "remote: \nremote: Processing changes: refs: 1, new: 1, done\nremote: New Changes:        \n\
-                        remote:   https://gerrit.example/c/setup/+/42 cc-sync push from host [NEW]        \n";
+                        remote:   https://gerrit.example/c/setup/+/42 harness-sync push from host [NEW]        \n";
 
         assert_eq!(
             change_url(messages).as_deref(),

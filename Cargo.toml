@@ -1,11 +1,11 @@
 [package]
-name = "cc-sync"
+name = "harness-sync"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 description = "Sync the Claude Code user-level setup between machines through a git repo"
 license = "MIT"
-repository = "https://github.com/xobotyi/cc-sync"
+repository = "https://github.com/xobotyi/harness-sync"
 readme = "README.md"
 keywords = ["claude-code", "sync", "git", "cli", "config"]
 categories = ["command-line-utilities", "config"]

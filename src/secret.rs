@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::atomic;
 use crate::item::{ItemId, Items, KeyPath, Source};
 
-const PLACEHOLDER_PREFIX: &str = "<cc-sync secret ";
+const PLACEHOLDER_PREFIX: &str = "<harness-sync secret ";
 
 const TOKEN_PREFIXES: [(&str, usize); 17] = [
     ("sk-ant-", 20),
@@ -409,7 +409,7 @@ mod tests {
             "/Users/me/.claude/statusline.sh",
             "Bearer ${TOKEN}",
             "task-ant-0123456789abcdefghijklmnop",
-            "<cc-sync secret settings:/env/GITHUB_TOKEN>",
+            "<harness-sync secret settings:/env/GITHUB_TOKEN>",
         ];
 
         assert!(
@@ -425,7 +425,7 @@ mod tests {
     #[test]
     fn the_scan_reports_key_paths_and_skips_placeholders() {
         let items = settings_items(json!({
-            "env": {"NOTE": "ghp_0123456789abcdefghijABCDEFGHIJ012345", "GITHUB_TOKEN": "<cc-sync secret settings:/env/GITHUB_TOKEN>"},
+            "env": {"NOTE": "ghp_0123456789abcdefghijABCDEFGHIJ012345", "GITHUB_TOKEN": "<harness-sync secret settings:/env/GITHUB_TOKEN>"},
             "hooks": {"Stop": [{"command": "curl -H 'Bearer abcdefghijklmnopqrstuvwxyz'"}]}
         }))
         .unwrap();
@@ -451,7 +451,7 @@ mod tests {
 
         assert_eq!(
             redacted,
-            json!({"command": "<cc-sync secret settings:/statusLine/command>", "type": "command"})
+            json!({"command": "<harness-sync secret settings:/statusLine/command>", "type": "command"})
         );
     }
 
@@ -465,11 +465,11 @@ mod tests {
 
         let view = settings_items(json!({
             "env": {
-                "GITHUB_TOKEN": "<cc-sync secret settings:/env/GITHUB_TOKEN>",
+                "GITHUB_TOKEN": "<harness-sync secret settings:/env/GITHUB_TOKEN>",
                 "EDITOR": "vim"
             },
             "pluginConfigs": {"p": {"options": {
-                "headers": {"X-Id": "<cc-sync secret settings:/pluginConfigs/p/options/headers/X-Id>"},
+                "headers": {"X-Id": "<harness-sync secret settings:/pluginConfigs/p/options/headers/X-Id>"},
                 "port": 1
             }}}
         }))
@@ -494,9 +494,9 @@ mod tests {
         assert_eq!(
             view,
             settings_items(json!({
-                "env": {"INTERNAL_URL": "<cc-sync secret settings:/env/INTERNAL_URL>"},
+                "env": {"INTERNAL_URL": "<harness-sync secret settings:/env/INTERNAL_URL>"},
                 "pluginConfigs": {"p": {
-                    "options": {"url": "<cc-sync secret settings:/pluginConfigs/p/options/url>", "port": 1},
+                    "options": {"url": "<harness-sync secret settings:/pluginConfigs/p/options/url>", "port": 1},
                     "name": "n"
                 }}
             }))
@@ -517,9 +517,9 @@ mod tests {
         assert_eq!(
             view,
             settings_items(json!({
-                "env": {"GITHUB_TOKEN": "<cc-sync secret settings:/env/GITHUB_TOKEN>"},
+                "env": {"GITHUB_TOKEN": "<harness-sync secret settings:/env/GITHUB_TOKEN>"},
                 "pluginConfigs": {"p": {"options": {
-                    "apiToken": "<cc-sync secret settings:/pluginConfigs/p/options/apiToken>"
+                    "apiToken": "<harness-sync secret settings:/pluginConfigs/p/options/apiToken>"
                 }}}
             }))
             .unwrap()
@@ -529,8 +529,7 @@ mod tests {
     #[test]
     fn restore_takes_each_secret_from_the_local_value() {
         let id = key("settings:/pluginConfigs/p").item();
-        let remote =
-            json!({"url": "b", "apiToken": "<cc-sync secret settings:/pluginConfigs/p/apiToken>"});
+        let remote = json!({"url": "b", "apiToken": "<harness-sync secret settings:/pluginConfigs/p/apiToken>"});
         let local = json!({"url": "a", "apiToken": "mine"});
 
         let restored = restore(&id, &remote, Some(&local), &mut |_| Ok(None)).unwrap();
@@ -545,14 +544,13 @@ mod tests {
     #[test]
     fn restore_leaves_out_a_secret_that_the_machine_does_not_have() {
         let id = key("settings:/pluginConfigs/p").item();
-        let remote =
-            json!({"url": "b", "apiToken": "<cc-sync secret settings:/pluginConfigs/p/apiToken>"});
+        let remote = json!({"url": "b", "apiToken": "<harness-sync secret settings:/pluginConfigs/p/apiToken>"});
         let whole = key("settings:/env/GITHUB_TOKEN").item();
 
         let partial = restore(&id, &remote, None, &mut |_| Ok(None)).unwrap();
         let absent = restore(
             &whole,
-            &json!("<cc-sync secret settings:/env/GITHUB_TOKEN>"),
+            &json!("<harness-sync secret settings:/env/GITHUB_TOKEN>"),
             None,
             &mut |_| Ok(None),
         )
@@ -571,7 +569,7 @@ mod tests {
 
         let restored = restore(
             &id,
-            &json!("<cc-sync secret settings:/env/GITHUB_TOKEN>"),
+            &json!("<harness-sync secret settings:/env/GITHUB_TOKEN>"),
             None,
             &mut |key| {
                 asked.push(key.clone());
@@ -592,8 +590,8 @@ mod tests {
         let open = key("settings:/env/OPEN_TOKEN");
         let setup = settings_items(json!({"env": {"SET_TOKEN": "x"}})).unwrap();
         let remote = settings_items(json!({"env": {
-            "SET_TOKEN": "<cc-sync secret settings:/env/SET_TOKEN>",
-            "OPEN_TOKEN": "<cc-sync secret settings:/env/OPEN_TOKEN>"
+            "SET_TOKEN": "<harness-sync secret settings:/env/SET_TOKEN>",
+            "OPEN_TOKEN": "<harness-sync secret settings:/env/OPEN_TOKEN>"
         }}))
         .unwrap();
 

@@ -1,4 +1,4 @@
-//! cc-sync syncs the Claude Code user-level setup between machines through a git repo.
+//! harness-sync syncs the Claude Code user-level setup between machines through a git repo.
 
 mod atomic;
 mod compare;
@@ -111,7 +111,7 @@ enum Command {
         #[command(subcommand)]
         command: TargetCommand,
     },
-    /// Show or change the secrets, include, and exclude lists in cc-sync.toml of a target
+    /// Show or change the secrets, include, and exclude lists in harness-sync.toml of a target
     Declarations {
         #[command(subcommand)]
         command: DeclarationsCommand,

@@ -58,8 +58,9 @@ pub(crate) fn parse_target_name(text: &str) -> Result<String> {
 
 impl Config {
     pub(crate) fn load_connected(path: &Path) -> Result<Self> {
-        Self::load(path)?
-            .context("this machine is not connected to a remote; run `cc-sync init <remote>` first")
+        Self::load(path)?.context(
+            "this machine is not connected to a remote; run `harness-sync init <remote>` first",
+        )
     }
 
     pub(crate) fn load(path: &Path) -> Result<Option<Self>> {

@@ -4,7 +4,7 @@ use crate::support::{Machine, Remote, assert_exit};
 
 fn connected(remote: &Remote) -> Machine {
     let machine = Machine::new();
-    assert_exit(&machine.cc_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
     machine
 }
 
@@ -33,10 +33,10 @@ fn authored_files_move_with_their_mode() {
     );
     first.write_file(".claude/rules/.DS_Store", "finder\n");
     first.write_file(".claude/history.jsonl", "{}\n");
-    assert_exit(&first.cc_sync(&["push"]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
     let second = connected(&remote);
 
-    let output = second.cc_sync(&["pull"]);
+    let output = second.harness_sync(&["pull"]);
 
     assert_exit(&output, 0);
     assert_eq!(
@@ -69,7 +69,7 @@ fn authored_files_move_with_their_mode() {
             "{skipped}"
         );
     }
-    let (status, _) = first.cc_sync_json(&["status"]);
+    let (status, _) = first.harness_sync_json(&["status"]);
     assert_eq!(status["items"], json!([]));
 }
 
@@ -79,13 +79,13 @@ fn a_file_deleted_on_one_machine_is_deleted_on_the_other() {
     let first = connected(&remote);
     first.write_file(".claude/rules/old.md", "old rule\n");
     first.write_file(".claude/rules/kept.md", "kept rule\n");
-    assert_exit(&first.cc_sync(&["push"]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
     let second = connected(&remote);
-    assert_exit(&second.cc_sync(&["pull"]), 0);
+    assert_exit(&second.harness_sync(&["pull"]), 0);
     std::fs::remove_file(first.home().join(".claude/rules/old.md")).unwrap();
-    assert_exit(&first.cc_sync(&["push"]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
 
-    let (report, output) = second.cc_sync_json(&["pull"]);
+    let (report, output) = second.harness_sync_json(&["pull"]);
 
     assert_exit(&output, 0);
     assert_eq!(report["items"][0]["id"], "file:rules/old.md");
@@ -111,7 +111,7 @@ fn a_token_in_an_authored_file_blocks_the_push() {
         "Call the API with ghp_e2eSecretValue0123456789abcdefABCDEF.\n",
     );
 
-    let (report, output) = machine.cc_sync_json(&["push"]);
+    let (report, output) = machine.harness_sync_json(&["push"]);
 
     assert_exit(&output, 5);
     assert_eq!(report["secrets_found"], json!(["file:rules/api.md"]));
@@ -137,10 +137,10 @@ fn files_that_synced_items_reference_move_too() {
     );
     first.write_file(".claude/notes/extra.md", "extra\n");
     first.write_file(".claude/notes/unreferenced.md", "stays\n");
-    assert_exit(&first.cc_sync(&["push"]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
     let second = connected(&remote);
 
-    let output = second.cc_sync(&["pull"]);
+    let output = second.harness_sync(&["pull"]);
 
     assert_exit(&output, 0);
     assert_eq!(
@@ -157,7 +157,7 @@ fn files_that_synced_items_reference_move_too() {
         Some("extra\n")
     );
     assert_eq!(second.read_file(".claude/notes/unreferenced.md"), None);
-    let (status, _) = second.cc_sync_json(&["status"]);
+    let (status, _) = second.harness_sync_json(&["status"]);
     assert_eq!(status["items"], json!([]));
 }
 
@@ -166,15 +166,15 @@ fn exclude_removes_a_referenced_file_and_a_key_from_the_catalog() {
     let remote = Remote::new();
     remote.commit_file(
         "main",
-        "cc-sync.toml",
+        "harness-sync.toml",
         "exclude = [\"file:statusline.sh\", \"settings:/model\"]\n",
     );
     let first = connected(&remote);
     first.write_settings(&json!({"model": "opus", "statusLine": {"type": "command", "command": "~/.claude/statusline.sh"}}));
     first.write_file(".claude/statusline.sh", "#!/bin/sh\n");
-    assert_exit(&first.cc_sync(&["pull"]), 0);
+    assert_exit(&first.harness_sync(&["pull"]), 0);
 
-    let output = first.cc_sync(&["push"]);
+    let output = first.harness_sync(&["push"]);
 
     assert_exit(&output, 0);
     let tree =
@@ -194,16 +194,16 @@ fn include_adds_the_files_of_a_directory_but_never_the_credentials() {
     let remote = Remote::new();
     remote.commit_file(
         "main",
-        "cc-sync.toml",
+        "harness-sync.toml",
         "include = [\"file:hooks\", \"file:.credentials.json\"]\n",
     );
     let first = connected(&remote);
     first.write_file(".claude/hooks/a.sh", "a\n");
     first.write_file(".claude/hooks/nested/b.sh", "b\n");
     first.write_file(".claude/.credentials.json", "{}\n");
-    assert_exit(&first.cc_sync(&["pull"]), 0);
+    assert_exit(&first.harness_sync(&["pull"]), 0);
 
-    let output = first.cc_sync(&["push"]);
+    let output = first.harness_sync(&["push"]);
 
     assert_exit(&output, 0);
     assert_eq!(remote.show("main:files/hooks/a.sh"), "a\n");

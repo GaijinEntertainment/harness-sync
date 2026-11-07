@@ -3,12 +3,12 @@ use serde_json::{Value, json};
 use crate::support::{Machine, Remote, assert_exit};
 
 const TOKEN: &str = "ghp_e2eSecretValue0123456789abcdefABCDEF";
-const PLACEHOLDER: &str = "<cc-sync secret settings:/env/GITHUB_TOKEN>";
+const PLACEHOLDER: &str = "<harness-sync secret settings:/env/GITHUB_TOKEN>";
 
 fn connected(remote: &Remote, settings: &Value) -> Machine {
     let machine = Machine::new();
     machine.write_settings(settings);
-    assert_exit(&machine.cc_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
     machine
 }
 
@@ -19,10 +19,10 @@ fn a_secret_never_reaches_the_repo_and_each_machine_keeps_its_own_value() {
         &remote,
         &json!({"env": {"GITHUB_TOKEN": TOKEN, "EDITOR": "vim"}}),
     );
-    assert_exit(&first.cc_sync(&["push"]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
     let second = connected(&remote, &json!({"env": {"GITHUB_TOKEN": "own"}}));
 
-    let output = second.cc_sync(&["pull"]);
+    let output = second.harness_sync(&["pull"]);
 
     assert_exit(&output, 0);
     let objects = remote.all_objects();
@@ -34,7 +34,7 @@ fn a_secret_never_reaches_the_repo_and_each_machine_keeps_its_own_value() {
         second.settings(),
         json!({"env": {"GITHUB_TOKEN": "own", "EDITOR": "vim"}})
     );
-    let (status, _) = second.cc_sync_json(&["status"]);
+    let (status, _) = second.harness_sync_json(&["status"]);
     assert_eq!(status["items"], json!([]));
 }
 
@@ -42,10 +42,10 @@ fn a_secret_never_reaches_the_repo_and_each_machine_keeps_its_own_value() {
 fn a_missing_secret_is_listed_and_is_not_a_local_deletion() {
     let remote = Remote::new();
     let first = connected(&remote, &json!({"env": {"GITHUB_TOKEN": TOKEN}}));
-    assert_exit(&first.cc_sync(&["push"]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
     let second = connected(&remote, &json!({}));
 
-    let (pulled, output) = second.cc_sync_json(&["pull"]);
+    let (pulled, output) = second.harness_sync_json(&["pull"]);
 
     assert_exit(&output, 0);
     assert_eq!(second.settings(), json!({}));
@@ -56,10 +56,10 @@ fn a_missing_secret_is_listed_and_is_not_a_local_deletion() {
         "remote": PLACEHOLDER
     });
     assert_eq!(pulled["items"].as_array().unwrap().last(), Some(&missing));
-    let (status, _) = second.cc_sync_json(&["status"]);
+    let (status, _) = second.harness_sync_json(&["status"]);
     assert_eq!(status["items"], json!([missing]));
     second.write_settings(&json!({"model": "opus"}));
-    assert_exit(&second.cc_sync(&["push"]), 0);
+    assert_exit(&second.harness_sync(&["push"]), 0);
     let snapshot: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
     assert_eq!(
         snapshot,
@@ -72,7 +72,7 @@ fn a_token_outside_a_placeholder_blocks_the_push() {
     let remote = Remote::new();
     let machine = connected(&remote, &json!({"env": {"NOTE": TOKEN}, "model": "opus"}));
 
-    let (report, output) = machine.cc_sync_json(&["push"]);
+    let (report, output) = machine.harness_sync_json(&["push"]);
 
     assert_exit(&output, 5);
     assert_eq!(report["outcome"], "secrets_found");
@@ -85,11 +85,11 @@ fn a_token_outside_a_placeholder_blocks_the_push() {
 fn secret_set_fills_a_missing_secret_from_stdin() {
     let remote = Remote::new();
     let first = connected(&remote, &json!({"env": {"GITHUB_TOKEN": TOKEN}}));
-    assert_exit(&first.cc_sync(&["push"]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
     let second = connected(&remote, &json!({}));
-    assert_exit(&second.cc_sync(&["pull"]), 0);
+    assert_exit(&second.harness_sync(&["pull"]), 0);
 
-    let output = second.cc_sync_with_input(
+    let output = second.harness_sync_with_input(
         &["secret", "set", "settings:/env/GITHUB_TOKEN"],
         "mine-value\n",
     );
@@ -100,7 +100,7 @@ fn secret_set_fills_a_missing_secret_from_stdin() {
         second.settings(),
         json!({"env": {"GITHUB_TOKEN": "mine-value"}})
     );
-    let (status, _) = second.cc_sync_json(&["status"]);
+    let (status, _) = second.harness_sync_json(&["status"]);
     assert_eq!(status["items"], json!([]));
 }
 
@@ -109,7 +109,7 @@ fn secret_set_refuses_a_key_path_that_is_not_a_secret() {
     let remote = Remote::new();
     let machine = connected(&remote, &json!({"model": "opus"}));
 
-    let output = machine.cc_sync_with_input(&["secret", "set", "settings:/model"], "sonnet\n");
+    let output = machine.harness_sync_with_input(&["secret", "set", "settings:/model"], "sonnet\n");
 
     assert_exit(&output, 1);
     assert_eq!(machine.settings(), json!({"model": "opus"}));
@@ -120,23 +120,27 @@ fn a_key_path_that_the_repo_declares_is_a_secret() {
     let remote = Remote::new();
     remote.commit_file(
         "main",
-        "cc-sync.toml",
+        "harness-sync.toml",
         "secrets = [\"settings:/env/INTERNAL_URL\"]\n",
     );
     let machine = connected(
         &remote,
         &json!({"env": {"INTERNAL_URL": "https://build.internal/hook"}}),
     );
-    assert_exit(&machine.cc_sync(&["pull"]), 0);
+    assert_exit(&machine.harness_sync(&["pull"]), 0);
 
-    let output = machine.cc_sync(&["push"]);
+    let output = machine.harness_sync(&["push"]);
 
     assert_exit(&output, 0);
     assert!(!remote.all_objects().contains("build.internal"));
     let snapshot: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
     assert_eq!(
         snapshot["env"]["INTERNAL_URL"],
-        "<cc-sync secret settings:/env/INTERNAL_URL>"
+        "<harness-sync secret settings:/env/INTERNAL_URL>"
     );
-    assert!(remote.show("main:cc-sync.toml").contains("INTERNAL_URL"));
+    assert!(
+        remote
+            .show("main:harness-sync.toml")
+            .contains("INTERNAL_URL")
+    );
 }

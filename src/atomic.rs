@@ -11,7 +11,7 @@ pub(crate) fn write(path: &Path, contents: &[u8]) -> Result<()> {
         .file_name()
         .with_context(|| format!("{} has no file name", path.display()))?;
     let tmp = dir.join(format!(
-        ".{}.cc-sync-{}.tmp",
+        ".{}.harness-sync-{}.tmp",
         name.to_string_lossy(),
         std::process::id()
     ));

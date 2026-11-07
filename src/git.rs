@@ -6,8 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 
-pub(crate) const BASE_REF: &str = "refs/cc-sync/base";
-const PENDING_REF: &str = "refs/cc-sync/pending";
+pub(crate) const BASE_REF: &str = "refs/harness-sync/base";
+const PENDING_REF: &str = "refs/harness-sync/pending";
 
 #[derive(Debug)]
 pub(crate) struct Git {
@@ -202,7 +202,7 @@ impl Git {
                 let now = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .map_or(0, |since| since.as_secs());
-                format!("cc-sync <cc-sync@localhost> {now} +0000")
+                format!("harness-sync <harness-sync@localhost> {now} +0000")
             },
             |output| String::from_utf8_lossy(&output.stdout).trim().to_owned(),
         )

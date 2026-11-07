@@ -50,15 +50,15 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
-          name="cc-sync-${GITHUB_REF_NAME}-${TARGET}"
+          name="harness-sync-${GITHUB_REF_NAME}-${TARGET}"
           mkdir "$name"
           cp README.md LICENSE "$name/"
           if [[ "$TARGET" == *windows* ]]; then
-            cp "target/$TARGET/release/cc-sync.exe" "$name/"
+            cp "target/$TARGET/release/harness-sync.exe" "$name/"
             archive="$name.zip"
             7z a "$archive" "$name"
           else
-            cp "target/$TARGET/release/cc-sync" "$name/"
+            cp "target/$TARGET/release/harness-sync" "$name/"
             archive="$name.tar.gz"
             tar -czf "$archive" "$name"
           fi
