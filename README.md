@@ -108,7 +108,7 @@ printf '%s' "$TOKEN" | cc-sync secret set settings:/env/GITHUB_TOKEN
 ## Per-machine differences
 
 A path under the home directory in a synced JSON value travels as `<cc-sync home>` and arrives as the home directory of
-the target machine, with forward slashes on Windows.
+the machine that pulls it, with forward slashes on Windows.
 
 `cc-sync pin <item>` keeps an item as it is on this machine: push sends the remote value instead, and pull leaves the
 local value. Use it for a value only one machine needs, or for an OS-specific value such as a Windows status line.

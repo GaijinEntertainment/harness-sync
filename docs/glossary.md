@@ -138,7 +138,8 @@ compares items, not lines).
 
 ### Secret placeholder
 
-The named marker that replaces a secret value in the remote snapshot. Pull keeps the target machine's own value for it.
+The named marker that replaces a secret value in the remote snapshot. For it, pull keeps the value that the machine
+that pulls already has.
 
 **Avoid:** token (also names the auth tokens that are the secrets, and the home-path token); mask (the act of replacing,
 not the stored marker); redacted value (suggests the value is gone, but each machine keeps its own).
@@ -146,7 +147,7 @@ not the stored marker); redacted value (suggests the value is gone, but each mac
 ### Home-path token
 
 The marker that replaces the home directory prefix of a path in the remote snapshot. Pull expands it to the home
-directory of the target machine.
+directory of the machine that pulls.
 
 **Avoid:** variable (suggests `${VAR}` environment expansion, which Claude Code does
 itself in MCP definitions); placeholder (names the secret marker).
