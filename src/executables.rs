@@ -90,13 +90,11 @@ mod tests {
     }
 
     #[test]
-    fn a_status_line_and_hooks_name_their_commands() {
+    fn a_command_whose_executable_is_absent_is_missing() {
         let setup = settings_items(json!({
             "statusLine": {"type": "command", "command": "sh -c true"},
-            "hooks": {"Stop": [{"hooks": [
-                {"type": "command", "command": "harness-sync-test-missing-tool --flag"},
-                {"type": "command", "command": "~/.claude/hooks/absent.sh"}
-            ]}]}
+            "tool": {"command": "harness-sync-test-missing-tool --flag"},
+            "script": {"command": "~/.claude/hooks/absent.sh"}
         }))
         .unwrap();
 
@@ -106,12 +104,12 @@ mod tests {
             missing,
             [
                 MissingExecutable {
-                    id: ".claude/settings.json:/hooks/Stop/0/hooks/0/command".to_owned(),
-                    executable: "harness-sync-test-missing-tool".to_owned()
+                    id: ".claude/settings.json:/script/command".to_owned(),
+                    executable: "~/.claude/hooks/absent.sh".to_owned()
                 },
                 MissingExecutable {
-                    id: ".claude/settings.json:/hooks/Stop/0/hooks/1/command".to_owned(),
-                    executable: "~/.claude/hooks/absent.sh".to_owned()
+                    id: ".claude/settings.json:/tool/command".to_owned(),
+                    executable: "harness-sync-test-missing-tool".to_owned()
                 },
             ]
         );

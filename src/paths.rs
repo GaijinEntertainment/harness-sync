@@ -2,7 +2,7 @@ use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::harness::{HARNESSES, Root};
+use crate::harness::{self, Root};
 use crate::item::is_within;
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ impl Paths {
     }
 
     fn new(home: PathBuf, env: impl Fn(&str) -> Option<PathBuf>) -> Self {
-        let roots = HARNESSES
+        let roots = harness::all()
             .iter()
             .flat_map(|harness| harness.roots)
             .map(|root| (root.path, root_dir(root, &home, &env)))

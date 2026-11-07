@@ -4,14 +4,13 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 
 use crate::config::{Config, Target};
-use crate::git;
 use crate::paths::Paths;
+use crate::registry;
 
 pub(crate) const DEFAULT_KIND: &str = "git";
 
-static KINDS: [&StorageKind; 2] = [&git::GIT, &git::GERRIT];
-
 /// A storage kind that a target can name in its `kind`.
+#[derive(Debug)]
 pub(crate) struct StorageKind {
     pub(crate) name: &'static str,
     pub(crate) open: fn(&Paths, &str, &Target) -> Box<dyn Storage>,
@@ -101,11 +100,12 @@ pub(crate) fn open(paths: &Paths, config: &Config, name: &str) -> Result<Box<dyn
 
 /// Opens the storage of `target` under `name`, which the sync configuration does not need to hold yet.
 pub(crate) fn open_target(paths: &Paths, name: &str, target: &Target) -> Result<Box<dyn Storage>> {
-    let kind = KINDS
+    let kinds = registry::installed().storage_kinds;
+    let kind = kinds
         .iter()
         .find(|kind| kind.name == target.kind)
         .with_context(|| {
-            let known: Vec<&str> = KINDS.iter().map(|kind| kind.name).collect();
+            let known: Vec<&str> = kinds.iter().map(|kind| kind.name).collect();
             format!(
                 "the target `{name}` has the storage kind `{}`; this harness-sync knows {}",
                 target.kind,

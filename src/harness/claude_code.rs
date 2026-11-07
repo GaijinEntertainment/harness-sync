@@ -58,7 +58,7 @@ const CLAUDE_JSON_KEYS: [&str; 29] = [
     "companionMuted",
 ];
 
-pub(super) static HARNESS: Harness = Harness {
+pub(crate) static HARNESS: Harness = Harness {
     name: "claude-code",
     roots: &[
         Root {
@@ -180,4 +180,64 @@ fn undeclared_marketplaces(
             })
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn named(id: &ItemId, value: &Value) -> Vec<(String, String)> {
+        commands(id, value)
+            .into_iter()
+            .map(|(key, command)| (key.to_string(), command))
+            .collect()
+    }
+
+    #[test]
+    fn a_status_line_an_mcp_server_and_hooks_name_their_commands() {
+        let status_line = ItemId::key(SETTINGS, &["statusLine"]);
+        let server = ItemId::key(".claude.json", &["mcpServers", "kartta"]);
+        let hooks = ItemId::key(SETTINGS, &["hooks"]);
+        let hooks_value = json!({"Stop": [{"hooks": [
+            {"type": "command", "command": "tool --flag"},
+            {"type": "command", "command": "~/.claude/hooks/x.sh"}
+        ]}]});
+
+        assert_eq!(
+            named(
+                &status_line,
+                &json!({"type": "command", "command": "sh -c true"})
+            ),
+            [(
+                ".claude/settings.json:/statusLine/command".to_owned(),
+                "sh -c true".to_owned()
+            )]
+        );
+        assert_eq!(
+            named(&server, &json!({"command": "kartta"})),
+            [(
+                ".claude.json:/mcpServers/kartta/command".to_owned(),
+                "kartta".to_owned()
+            )]
+        );
+        assert_eq!(
+            named(&hooks, &hooks_value),
+            [
+                (
+                    ".claude/settings.json:/hooks/Stop/0/hooks/0/command".to_owned(),
+                    "tool --flag".to_owned()
+                ),
+                (
+                    ".claude/settings.json:/hooks/Stop/0/hooks/1/command".to_owned(),
+                    "~/.claude/hooks/x.sh".to_owned()
+                ),
+            ]
+        );
+        assert_eq!(
+            named(&ItemId::key(SETTINGS, &["model"]), &json!("opus")),
+            []
+        );
+    }
 }

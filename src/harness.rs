@@ -1,5 +1,5 @@
-mod claude_code;
-mod pi;
+pub(crate) mod claude_code;
+pub(crate) mod pi;
 
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -7,9 +7,8 @@ use serde_json::Value;
 use crate::declarations::Declarations;
 use crate::item::{ItemId, Items, KeyPath, is_within};
 use crate::paths::Paths;
+use crate::registry;
 use crate::report::UndeclaredMarketplace;
-
-pub(crate) static HARNESSES: [&Harness; 2] = [&claude_code::HARNESS, &pi::HARNESS];
 
 pub(crate) type Commands = fn(&ItemId, &Value) -> Vec<(KeyPath, String)>;
 pub(crate) type MarketplaceCheck =
@@ -72,8 +71,12 @@ impl KeyedFile {
     }
 }
 
+pub(crate) fn all() -> &'static [&'static Harness] {
+    registry::installed().harnesses
+}
+
 pub(crate) fn keyed_files() -> impl Iterator<Item = &'static KeyedFile> {
-    HARNESSES.iter().flat_map(|harness| harness.keyed_files)
+    all().iter().flat_map(|harness| harness.keyed_files)
 }
 
 pub(crate) fn keyed_file(path: &str) -> Option<&'static KeyedFile> {
@@ -81,31 +84,31 @@ pub(crate) fn keyed_file(path: &str) -> Option<&'static KeyedFile> {
 }
 
 pub(crate) fn owner(file: &str) -> Option<&'static Harness> {
-    HARNESSES
+    all()
         .iter()
         .copied()
         .find(|harness| harness.roots.iter().any(|root| is_within(file, root.path)))
 }
 
 pub(crate) fn is_credentials(file: &str) -> bool {
-    HARNESSES
+    all()
         .iter()
         .any(|harness| harness.credentials.contains(&file))
 }
 
 pub(crate) fn is_skipped_dir(dir: &str) -> bool {
-    HARNESSES
+    all()
         .iter()
         .any(|harness| harness.skipped_dirs.contains(&dir))
 }
 
 pub(crate) fn by_name(name: &str) -> Result<&'static Harness> {
-    HARNESSES
+    all()
         .iter()
         .copied()
         .find(|harness| harness.name == name)
         .with_context(|| {
-            let names: Vec<&str> = HARNESSES.iter().map(|harness| harness.name).collect();
+            let names: Vec<&str> = all().iter().map(|harness| harness.name).collect();
             format!(
                 "there is no harness `{name}`; harness-sync syncs {}",
                 names.join(", ")

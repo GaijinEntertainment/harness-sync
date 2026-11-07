@@ -4,7 +4,7 @@ use std::fs;
 use anyhow::{Context, Result, ensure};
 
 use crate::config::{Config, Target};
-use crate::harness::{self, HARNESSES};
+use crate::harness;
 use crate::paths::Paths;
 use crate::report::{Report, short_commit};
 use crate::storage;
@@ -75,7 +75,7 @@ fn chosen_harnesses(paths: &Paths, named: &[String]) -> Result<Vec<String>> {
         chosen.dedup();
         return Ok(chosen);
     }
-    let present: Vec<String> = HARNESSES
+    let present: Vec<String> = harness::all()
         .iter()
         .filter(|harness| harness.is_present(paths))
         .map(|harness| harness.name.to_owned())
