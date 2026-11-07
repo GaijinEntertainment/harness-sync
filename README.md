@@ -23,9 +23,9 @@ The design and the decisions behind it are in [`design-docs/`](design-docs/).
   and push warn about it and show the entry to add to `extraKnownMarketplaces`.
 
 Everything else stays on the machine: the rest of `~/.claude.json` (counters, caches, account data, the `projects`
-records), credentials, history, sessions, auto-memory, `skills/synced/`, the plugin install records, and the plugin
-cache. When `CLAUDE_CONFIG_DIR` is set, cc-sync reads and writes the Claude Code files in that directory, as Claude Code
-does.
+records), credentials, history, sessions, auto-memory, `skills/synced/`, the removed skills in `skills/.trash/`, the
+plugin install records, and the plugin cache. When `CLAUDE_CONFIG_DIR` is set, cc-sync reads and writes the Claude Code
+files in that directory, as Claude Code does.
 
 ## Install
 

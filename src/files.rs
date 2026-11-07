@@ -23,7 +23,7 @@ const CATALOG_DIRS: [&str; 7] = [
     "workflows",
     "themes",
 ];
-const SKIPPED_DIRS: [&str; 1] = ["skills/synced"];
+const SKIPPED_DIRS: [&str; 2] = ["skills/synced", "skills/.trash"];
 const SKIPPED_NAMES: [&str; 1] = [".DS_Store"];
 const CREDENTIALS_FILE: &str = ".credentials.json";
 
