@@ -59,6 +59,12 @@ pub(crate) fn load_snapshot(
     commit: Option<&str>,
     declarations: &Declarations,
 ) -> Result<Items> {
+    let mut items = load_whole_snapshot(git, commit, &declarations.include)?;
+    items.retain(|id, _| !declarations.excludes(id));
+    Ok(items)
+}
+
+fn load_whole_snapshot(git: &Git, commit: Option<&str>, include: &[KeyPath]) -> Result<Items> {
     let Some(commit) = commit else {
         return Ok(Items::new());
     };
@@ -69,15 +75,9 @@ pub(crate) fn load_snapshot(
     let mut items = files::load_snapshot(git, commit)?;
     for ((source, spec), content) in JSON_SOURCES.iter().zip(&specs).zip(git.read_files(&specs)?) {
         if let Some(bytes) = content {
-            items.extend(parse(
-                *source,
-                &bytes,
-                Path::new(spec),
-                &declarations.include,
-            )?);
+            items.extend(parse(*source, &bytes, Path::new(spec), include)?);
         }
     }
-    items.retain(|id, _| !declarations.excludes(id));
     Ok(items)
 }
 
