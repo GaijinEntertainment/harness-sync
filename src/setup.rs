@@ -29,6 +29,9 @@ impl Backup {
 
     pub(crate) fn save(&self, relative: &Path, content: &[u8]) -> Result<()> {
         let path = self.dir.join(relative);
+        if path.exists() {
+            return Ok(());
+        }
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
         }
@@ -138,4 +141,23 @@ pub(crate) fn write_local(
         fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
     }
     atomic::write(&path, edited.as_bytes())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_backup_keeps_the_first_copy_of_a_file() {
+        let home = tempfile::tempdir().unwrap();
+        let backup = Backup::new(&Paths::for_home(home.path()));
+
+        backup.save(Path::new("settings.json"), b"before").unwrap();
+        backup.save(Path::new("settings.json"), b"between").unwrap();
+
+        assert_eq!(
+            fs::read(backup.dir.join("settings.json")).unwrap(),
+            b"before"
+        );
+    }
 }
