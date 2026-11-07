@@ -32,6 +32,10 @@ fn authored_files_move_with_their_mode() {
         "removed skill\n",
     );
     first.write_file(".claude/rules/.DS_Store", "finder\n");
+    first.write_file(
+        ".claude/skills/secret-scanner/node_modules/dep/index.js",
+        "module.exports = 1;\n",
+    );
     first.write_file(".claude/history.jsonl", "{}\n");
     assert_exit(&first.harness_sync(&["push"]), 0);
     let second = connected(&remote);
@@ -61,6 +65,7 @@ fn authored_files_move_with_their_mode() {
         "skills/synced/remote/SKILL.md",
         "skills/.trash/1792400872796-81361-NfxPAe/old/SKILL.md",
         "rules/.DS_Store",
+        "skills/secret-scanner/node_modules/dep/index.js",
         "history.jsonl",
     ] {
         assert_eq!(
