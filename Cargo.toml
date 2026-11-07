@@ -1,25 +1,32 @@
-[package]
-name = "harness-sync"
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
-description = "Sync the Claude Code user-level setup between machines through a git repo"
 license = "MIT"
 repository = "https://github.com/xobotyi/harness-sync"
 readme = "README.md"
-keywords = ["claude-code", "sync", "git", "cli", "config"]
+keywords = ["claude-code", "pi", "sync", "git", "cli"]
 categories = ["command-line-utilities", "config"]
 
-[dependencies]
+[workspace.dependencies]
+harness-sync-claude-code = { path = "crates/harness-sync-claude-code", version = "0.1.0" }
+harness-sync-core = { path = "crates/harness-sync-core", version = "0.1.0" }
+harness-sync-git = { path = "crates/harness-sync-git", version = "0.1.0" }
+harness-sync-pi = { path = "crates/harness-sync-pi", version = "0.1.0" }
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 jsonc-parser = { version = "0.34.0", features = ["cst"] }
 rpassword = "7.5.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order", "arbitrary_precision"] }
+tempfile = "3.27.0"
 toml = "1.2.1"
 
-[lints.rust]
+[workspace.lints.rust]
 ambiguous_negative_literals = "warn"
 elided_lifetimes_in_paths = "warn"
 missing_debug_implementations = "warn"
@@ -32,7 +39,7 @@ unsafe_code = "forbid"
 unused_lifetimes = "warn"
 unused_qualifications = "warn"
 
-[lints.clippy]
+[workspace.lints.clippy]
 correctness = { level = "deny", priority = -1 }
 suspicious = { level = "warn", priority = -1 }
 style = { level = "warn", priority = -1 }
@@ -64,6 +71,3 @@ verbose_file_reads = "warn"
 lto = "fat"
 codegen-units = 1
 strip = "symbols"
-
-[dev-dependencies]
-tempfile = "3.27.0"

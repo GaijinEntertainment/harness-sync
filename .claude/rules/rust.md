@@ -16,8 +16,8 @@ paths:
 
 - `clippy.toml` sets strict limits on argument count, boolean parameters, function length, cognitive complexity, and
   nesting depth. Read it before you design a function signature.
-- The `[lints]` table in `Cargo.toml` warns on `print_stdout` and `print_stderr`. Write terminal output only in
-  `src/output.rs`.
+- The `[workspace.lints]` table in the root `Cargo.toml` warns on `print_stdout` and `print_stderr`. Write terminal
+  output only in `crates/harness-sync/src/output.rs`.
 
 </lints>
 
@@ -25,8 +25,9 @@ paths:
 
 - `std::assert_matches` is unstable through Rust 1.99, and its import does not resolve. Write
   `assert!(matches!(value, Pattern))`. Do not write a `match` that ends in `panic!`.
-- End-to-end tests in `tests/` run the `harness-sync` binary with a temporary home directory and a bare git repo on
-  disk. Never let a test read or write the real `~/.claude`, `~/.claude.json`, or `~/.harness-sync`.
+- End-to-end tests in `crates/harness-sync/tests/` run the `harness-sync` binary with a temporary home directory and a
+  bare git repo on disk. Never let a test read or write the real `~/.claude`, `~/.claude.json`, `~/.pi`, or
+  `~/.harness-sync`.
 
 </testing>
 
