@@ -71,8 +71,12 @@ enum Command {
     },
     /// List the supported items that differ from the remote snapshot
     Status,
-    /// Send the local setup to the remote snapshot
-    Push,
+    /// Send the local setup to the primary target, or to the targets that --to names
+    Push {
+        /// Target to send to instead of the primary, or `all`; repeat it for several targets
+        #[arg(long = "to", value_name = "TARGET")]
+        to: Vec<String>,
+    },
     /// Apply the remote snapshot to the local setup
     Pull {
         /// Side that wins every conflict without a --take
@@ -163,7 +167,7 @@ fn execute(cli: &Cli) -> Result<Report> {
             name,
         } => init::run(&paths, name, remote, branch),
         Command::Status => status::run(&paths),
-        Command::Push => push::run(&paths),
+        Command::Push { to } => push::run(&paths, to),
         Command::Pull { prefer, takes } => pull::run(
             &paths,
             &Choices {

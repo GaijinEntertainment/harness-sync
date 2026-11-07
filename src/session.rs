@@ -15,6 +15,8 @@ use crate::{files, home, marketplaces, secret, setup};
 #[derive(Debug)]
 pub(crate) struct Session {
     pub(crate) config: Config,
+    pub(crate) target: String,
+    pub(crate) branch: String,
     pub(crate) git: Git,
     pub(crate) base_commit: Option<String>,
     pub(crate) remote_commit: Option<String>,
@@ -28,14 +30,29 @@ pub(crate) struct Session {
 
 impl Session {
     pub(crate) fn open(paths: &Paths) -> Result<Self> {
-        let config = Config::load(&paths.config_file())?.context(
-            "this machine is not connected to a remote; run `cc-sync init <remote>` first",
-        )?;
+        Self::open_target(paths, None)
+    }
+
+    pub(crate) fn open_target(paths: &Paths, target: Option<&str>) -> Result<Self> {
+        let config = Config::load_connected(&paths.config_file())?;
+        let target = target.unwrap_or(&config.primary).to_owned();
+        let branch = config
+            .targets
+            .get(&target)
+            .with_context(|| {
+                format!("there is no target `{target}`; add it with `cc-sync target add`")
+            })?
+            .branch
+            .clone();
         let git = Git::open(paths.repo_dir());
-        let primary = config.primary()?;
-        git.fetch(&config.primary)?;
-        let base_commit = git.resolve(BASE_REF)?;
-        let remote_commit = git.resolve(&git::remote_ref(&config.primary, &primary.branch))?;
+        git.fetch(&target)?;
+        let remote_commit = git.resolve(&git::remote_ref(&target, &branch))?;
+        let primary = target == config.primary;
+        let base_commit = if primary {
+            git.resolve(BASE_REF)?
+        } else {
+            remote_commit.clone()
+        };
         let pins = config.pinned_items()?;
         let declarations = Declarations::load(&git, remote_commit.as_deref())?;
         let local_setup = setup::load_local(paths, &git, &declarations)?;
@@ -45,8 +62,12 @@ impl Session {
         for value in local.values_mut() {
             home::tokenize(value, &paths.home);
         }
-        let base = setup::load_snapshot(&git, base_commit.as_deref(), &declarations)?;
         let remote = setup::load_snapshot(&git, remote_commit.as_deref(), &declarations)?;
+        let base = if primary {
+            setup::load_snapshot(&git, base_commit.as_deref(), &declarations)?
+        } else {
+            remote.clone()
+        };
         if cfg!(not(unix)) {
             files::carry_executable(&mut local, &[&base, &remote]);
         }
@@ -57,6 +78,8 @@ impl Session {
         };
         Ok(Self {
             config,
+            target,
+            branch,
             git,
             base_commit,
             remote_commit,
@@ -67,6 +90,10 @@ impl Session {
             missing_secrets,
             three_way,
         })
+    }
+
+    pub(crate) fn is_primary(&self) -> bool {
+        self.target == self.config.primary
     }
 
     pub(crate) fn differences(&self) -> Vec<Difference<'_>> {
