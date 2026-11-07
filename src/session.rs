@@ -75,7 +75,11 @@ impl Session {
         let remote =
             setup::load_snapshot(&git, remote_commit.as_deref(), &declarations, &selection)?;
         let base = if primary {
+            let without_base = Selection::new(&config.harnesses_without_base)?;
             setup::load_snapshot(&git, base_commit.as_deref(), &declarations, &selection)?
+                .into_iter()
+                .filter(|(id, _)| !without_base.owns(&id.file))
+                .collect()
         } else {
             remote.clone()
         };

@@ -16,6 +16,8 @@ pub(crate) struct Config {
     #[serde(default)]
     pub(crate) harnesses: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) harnesses_without_base: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) pins: Vec<String>,
     pub(crate) targets: BTreeMap<String, Target>,
 }

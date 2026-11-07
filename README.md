@@ -55,7 +55,8 @@ The machine-local state lives in `~/.harness-sync/`: `config.toml` (the harnesse
 the pins of this machine), `repo.git` (a bare clone), `missing-secrets.toml`, and `backups/`.
 
 A machine reads and writes only the items of the harnesses it syncs. Push leaves the items of other harnesses in the
-repo as they are.
+repo as they are. A harness that a machine starts to sync after its last pull has no base commit until the next pull:
+push refuses, and pull treats each of its items that differs as a conflict.
 
 ## Set up another machine
 

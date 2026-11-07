@@ -34,6 +34,7 @@ pub(crate) fn run(
         None => Config {
             primary: name.to_owned(),
             harnesses: chosen_harnesses(paths, harnesses)?,
+            harnesses_without_base: Vec::new(),
             pins: Vec::new(),
             targets: BTreeMap::from([(name.to_owned(), target)]),
         },

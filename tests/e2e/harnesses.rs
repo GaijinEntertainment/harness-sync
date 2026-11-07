@@ -90,3 +90,36 @@ fn harness_add_and_remove_change_the_list_of_the_machine() {
     let (listed, _) = machine.harness_sync_json(&["harness", "list"]);
     assert_eq!(listed["harnesses"][0]["synced"], true);
 }
+
+#[test]
+fn a_harness_added_after_the_last_pull_has_no_base_until_the_next_pull() {
+    let remote = Remote::new();
+    let first = Machine::new();
+    first.write_settings(&json!({"model": "opus"}));
+    assert_exit(&first.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
+    let second = Machine::new();
+    second.write_settings(&json!({"model": "sonnet"}));
+    assert_exit(&second.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(
+        &second.harness_sync(&["harness", "remove", "claude-code"]),
+        0,
+    );
+    assert_exit(&second.harness_sync(&["pull"]), 0);
+    assert_exit(&second.harness_sync(&["harness", "add", "claude-code"]), 0);
+
+    let push = second.harness_sync(&["push"]);
+    let (status, _) = second.harness_sync_json(&["status"]);
+    let stopped = second.harness_sync(&["pull"]);
+    let pulled = second.harness_sync(&["pull", "--prefer", "remote"]);
+    let (pushed, _) = second.harness_sync_json(&["push"]);
+
+    assert_exit(&push, 1);
+    assert!(text(&push.stderr).contains("run `harness-sync pull` first"));
+    assert_eq!(status["items"][0]["state"], "conflict");
+    assert_exit(&stopped, 3);
+    assert_exit(&pulled, 0);
+    assert_eq!(second.settings(), json!({"model": "opus"}));
+    assert_eq!(pushed["outcome"], "ok");
+    assert!(remote.show("main:.claude/settings.json").contains("opus"));
+}
