@@ -41,12 +41,13 @@ impl Declarations {
         };
         let context = || format!("cannot parse {DECLARATIONS_FILE} of the remote snapshot");
         let text = String::from_utf8(bytes).with_context(context)?;
-        let file: DeclarationsFile = toml::from_str(&text).with_context(context)?;
+        Self::parse(&text).with_context(context)
+    }
+
+    pub(crate) fn parse(text: &str) -> Result<Self> {
+        let file: DeclarationsFile = toml::from_str(text)?;
         let parse = |list: &[String]| -> Result<Vec<KeyPath>> {
-            list.iter()
-                .map(|key| key.parse())
-                .collect::<Result<_>>()
-                .with_context(context)
+            list.iter().map(|key| key.parse()).collect()
         };
         Ok(Self {
             secrets: parse(&file.secrets)?,
