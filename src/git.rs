@@ -118,8 +118,8 @@ impl Git {
         parse_batch(&output.stdout, specs.len())
     }
 
-    pub(crate) fn list_files(&self, commit: &str, dir: &str) -> Result<Vec<TreeEntry>> {
-        let output = self.run(&["ls-tree", "-r", "-z", "--full-tree", commit, "--", dir])?;
+    pub(crate) fn list_files(&self, commit: &str) -> Result<Vec<TreeEntry>> {
+        let output = self.run(&["ls-tree", "-r", "-z", "--full-tree", commit])?;
         parse_tree(&output.stdout)
     }
 
@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn tree_records_yield_blobs_with_their_mode() {
-        let stream = b"100644 blob aaa\tfiles/CLAUDE.md\x00100755 blob bbb\tfiles/hooks/x.sh\x00160000 commit ccc\tfiles/sub\x00";
+        let stream = b"100644 blob aaa\t.claude/CLAUDE.md\x00100755 blob bbb\t.claude/hooks/x.sh\x00160000 commit ccc\t.claude/sub\x00";
 
         let entries = parse_tree(stream).unwrap();
 
@@ -337,12 +337,12 @@ mod tests {
             entries,
             [
                 TreeEntry {
-                    path: "files/CLAUDE.md".to_owned(),
+                    path: ".claude/CLAUDE.md".to_owned(),
                     blob: "aaa".to_owned(),
                     executable: false
                 },
                 TreeEntry {
-                    path: "files/hooks/x.sh".to_owned(),
+                    path: ".claude/hooks/x.sh".to_owned(),
                     blob: "bbb".to_owned(),
                     executable: true
                 },

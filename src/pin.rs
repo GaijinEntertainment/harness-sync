@@ -8,7 +8,8 @@ use crate::report::Report;
 pub(crate) fn run(paths: &Paths, id: &ItemId, pinned: bool) -> Result<Report> {
     ensure!(
         id.names_an_item(),
-        "`{id}` is not an item id: pin a key of settings.json, or one entry of a key that holds entries, such as `settings:/env/NAME`"
+        "`{id}` is not an item id: pin a file, such as `.claude/rules/NAME.md`, a key of a JSON file, or one entry of a key \
+         that holds entries, such as `.claude/settings.json:/env/NAME`"
     );
     let config_file = paths.config_file();
     let mut config = Config::load(&config_file)?.context(

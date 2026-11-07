@@ -100,7 +100,7 @@ fn status_and_push_warn_about_a_marketplace_that_settings_do_not_declare() {
     remote.commit_file(
         "main",
         "harness-sync.toml",
-        "exclude = [\"settings:/extraKnownMarketplaces/hidden\"]\n",
+        "exclude = [\".claude/settings.json:/extraKnownMarketplaces/hidden\"]\n",
     );
     let first = Machine::new();
     first.write_settings(&json!({"extraKnownMarketplaces": {"acme": {"source": {"source": "github", "repo": "acme/plugins"}}}}));

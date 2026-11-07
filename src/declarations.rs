@@ -59,6 +59,6 @@ impl Declarations {
     pub(crate) fn excludes(&self, id: &ItemId) -> bool {
         self.exclude
             .iter()
-            .any(|path| path.source == id.source && id.path.starts_with(&path.path))
+            .any(|path| path.covers(&id.file, &id.path))
     }
 }

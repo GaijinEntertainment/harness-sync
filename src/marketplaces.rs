@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use serde_json::{Map, Value};
 
 use crate::declarations::Declarations;
-use crate::item::{ItemId, Items, JsonFile, Source};
+use crate::item::{CLAUDE_SETTINGS, ItemId, Items};
 use crate::paths::Paths;
 use crate::report::UndeclaredMarketplace;
 use crate::secret;
@@ -28,10 +28,7 @@ pub(crate) fn undeclared(
     Ok(known
         .into_iter()
         .filter_map(|(name, record)| {
-            let id = ItemId {
-                source: Source::Json(JsonFile::Settings),
-                path: vec![DECLARATION_KEY.to_owned(), name.clone()],
-            };
+            let id = ItemId::key(CLAUDE_SETTINGS, &[DECLARATION_KEY, &name]);
             if setup.contains_key(&id) || declarations.excludes(&id) {
                 return None;
             }

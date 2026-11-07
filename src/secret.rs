@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::atomic;
-use crate::item::{ItemId, Items, KeyPath, Source};
+use crate::item::{ItemId, Items, KeyPath};
 
 const PLACEHOLDER_PREFIX: &str = "<harness-sync secret ";
 
@@ -68,7 +68,7 @@ pub(crate) fn local_view(
         .iter()
         .map(|(id, value)| {
             let mut value = value.clone();
-            if let Source::Json(_) = id.source {
+            if !id.is_whole_file() {
                 let mut key = id.key_path();
                 let secret = is_secret_path(&key, declared);
                 mask(&mut value, &mut key, secret, declared);
@@ -213,7 +213,7 @@ pub(crate) fn is_secret_path(key: &KeyPath, declared: &[KeyPath]) -> bool {
 fn is_declared(key: &KeyPath, declared: &[KeyPath]) -> bool {
     declared
         .iter()
-        .any(|path| path.source == key.source && key.path.starts_with(&path.path))
+        .any(|path| path.covers(&key.file, &key.path))
 }
 
 pub(crate) fn scan(items: &Items) -> Vec<KeyPath> {
@@ -409,7 +409,7 @@ mod tests {
             "/Users/me/.claude/statusline.sh",
             "Bearer ${TOKEN}",
             "task-ant-0123456789abcdefghijklmnop",
-            "<harness-sync secret settings:/env/GITHUB_TOKEN>",
+            "<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>",
         ];
 
         assert!(
@@ -425,7 +425,7 @@ mod tests {
     #[test]
     fn the_scan_reports_key_paths_and_skips_placeholders() {
         let items = settings_items(json!({
-            "env": {"NOTE": "ghp_0123456789abcdefghijABCDEFGHIJ012345", "GITHUB_TOKEN": "<harness-sync secret settings:/env/GITHUB_TOKEN>"},
+            "env": {"NOTE": "ghp_0123456789abcdefghijABCDEFGHIJ012345", "GITHUB_TOKEN": "<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>"},
             "hooks": {"Stop": [{"command": "curl -H 'Bearer abcdefghijklmnopqrstuvwxyz'"}]}
         }))
         .unwrap();
@@ -435,15 +435,15 @@ mod tests {
         assert_eq!(
             found,
             [
-                key("settings:/env/NOTE"),
-                key("settings:/hooks/Stop/0/command")
+                key(".claude/settings.json:/env/NOTE"),
+                key(".claude/settings.json:/hooks/Stop/0/command")
             ]
         );
     }
 
     #[test]
     fn redact_replaces_token_like_strings_with_their_placeholder() {
-        let id = key("settings:/statusLine").item();
+        let id = key(".claude/settings.json:/statusLine").item();
         let value =
             json!({"command": "ghp_0123456789abcdefghijABCDEFGHIJ012345", "type": "command"});
 
@@ -451,7 +451,7 @@ mod tests {
 
         assert_eq!(
             redacted,
-            json!({"command": "<harness-sync secret settings:/statusLine/command>", "type": "command"})
+            json!({"command": "<harness-sync secret .claude/settings.json:/statusLine/command>", "type": "command"})
         );
     }
 
@@ -465,11 +465,11 @@ mod tests {
 
         let view = settings_items(json!({
             "env": {
-                "GITHUB_TOKEN": "<harness-sync secret settings:/env/GITHUB_TOKEN>",
+                "GITHUB_TOKEN": "<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>",
                 "EDITOR": "vim"
             },
             "pluginConfigs": {"p": {"options": {
-                "headers": {"X-Id": "<harness-sync secret settings:/pluginConfigs/p/options/headers/X-Id>"},
+                "headers": {"X-Id": "<harness-sync secret .claude/settings.json:/pluginConfigs/p/options/headers/X-Id>"},
                 "port": 1
             }}}
         }))
@@ -485,8 +485,8 @@ mod tests {
         }))
         .unwrap();
         let declared = [
-            key("settings:/env/INTERNAL_URL"),
-            key("settings:/pluginConfigs/p/options"),
+            key(".claude/settings.json:/env/INTERNAL_URL"),
+            key(".claude/settings.json:/pluginConfigs/p/options"),
         ];
 
         let view = local_view(&setup, &BTreeSet::new(), &declared);
@@ -494,9 +494,9 @@ mod tests {
         assert_eq!(
             view,
             settings_items(json!({
-                "env": {"INTERNAL_URL": "<harness-sync secret settings:/env/INTERNAL_URL>"},
+                "env": {"INTERNAL_URL": "<harness-sync secret .claude/settings.json:/env/INTERNAL_URL>"},
                 "pluginConfigs": {"p": {
-                    "options": {"url": "<harness-sync secret settings:/pluginConfigs/p/options/url>", "port": 1},
+                    "options": {"url": "<harness-sync secret .claude/settings.json:/pluginConfigs/p/options/url>", "port": 1},
                     "name": "n"
                 }}
             }))
@@ -508,8 +508,8 @@ mod tests {
     fn a_missing_secret_shows_its_placeholder_in_the_local_view() {
         let setup = settings_items(json!({"pluginConfigs": {"p": {"options": {}}}})).unwrap();
         let missing = BTreeSet::from([
-            key("settings:/env/GITHUB_TOKEN"),
-            key("settings:/pluginConfigs/p/options/apiToken"),
+            key(".claude/settings.json:/env/GITHUB_TOKEN"),
+            key(".claude/settings.json:/pluginConfigs/p/options/apiToken"),
         ]);
 
         let view = local_view(&setup, &missing, &[]);
@@ -517,9 +517,9 @@ mod tests {
         assert_eq!(
             view,
             settings_items(json!({
-                "env": {"GITHUB_TOKEN": "<harness-sync secret settings:/env/GITHUB_TOKEN>"},
+                "env": {"GITHUB_TOKEN": "<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>"},
                 "pluginConfigs": {"p": {"options": {
-                    "apiToken": "<harness-sync secret settings:/pluginConfigs/p/options/apiToken>"
+                    "apiToken": "<harness-sync secret .claude/settings.json:/pluginConfigs/p/options/apiToken>"
                 }}}
             }))
             .unwrap()
@@ -528,8 +528,8 @@ mod tests {
 
     #[test]
     fn restore_takes_each_secret_from_the_local_value() {
-        let id = key("settings:/pluginConfigs/p").item();
-        let remote = json!({"url": "b", "apiToken": "<harness-sync secret settings:/pluginConfigs/p/apiToken>"});
+        let id = key(".claude/settings.json:/pluginConfigs/p").item();
+        let remote = json!({"url": "b", "apiToken": "<harness-sync secret .claude/settings.json:/pluginConfigs/p/apiToken>"});
         let local = json!({"url": "a", "apiToken": "mine"});
 
         let restored = restore(&id, &remote, Some(&local), &mut |_| Ok(None)).unwrap();
@@ -543,33 +543,39 @@ mod tests {
 
     #[test]
     fn restore_leaves_out_a_secret_that_the_machine_does_not_have() {
-        let id = key("settings:/pluginConfigs/p").item();
-        let remote = json!({"url": "b", "apiToken": "<harness-sync secret settings:/pluginConfigs/p/apiToken>"});
-        let whole = key("settings:/env/GITHUB_TOKEN").item();
+        let id = key(".claude/settings.json:/pluginConfigs/p").item();
+        let remote = json!({"url": "b", "apiToken": "<harness-sync secret .claude/settings.json:/pluginConfigs/p/apiToken>"});
+        let whole = key(".claude/settings.json:/env/GITHUB_TOKEN").item();
 
         let partial = restore(&id, &remote, None, &mut |_| Ok(None)).unwrap();
         let absent = restore(
             &whole,
-            &json!("<harness-sync secret settings:/env/GITHUB_TOKEN>"),
+            &json!("<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>"),
             None,
             &mut |_| Ok(None),
         )
         .unwrap();
 
         assert_eq!(partial.value, Some(json!({"url": "b"})));
-        assert_eq!(partial.missing, [key("settings:/pluginConfigs/p/apiToken")]);
+        assert_eq!(
+            partial.missing,
+            [key(".claude/settings.json:/pluginConfigs/p/apiToken")]
+        );
         assert_eq!(absent.value, None);
-        assert_eq!(absent.missing, [key("settings:/env/GITHUB_TOKEN")]);
+        assert_eq!(
+            absent.missing,
+            [key(".claude/settings.json:/env/GITHUB_TOKEN")]
+        );
     }
 
     #[test]
     fn restore_asks_for_a_secret_that_the_machine_does_not_have() {
-        let id = key("settings:/env/GITHUB_TOKEN").item();
+        let id = key(".claude/settings.json:/env/GITHUB_TOKEN").item();
         let mut asked = Vec::new();
 
         let restored = restore(
             &id,
-            &json!("<harness-sync secret settings:/env/GITHUB_TOKEN>"),
+            &json!("<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>"),
             None,
             &mut |key| {
                 asked.push(key.clone());
@@ -580,18 +586,18 @@ mod tests {
 
         assert_eq!(restored.value, Some(json!("entered")));
         assert_eq!(restored.missing, []);
-        assert_eq!(asked, [key("settings:/env/GITHUB_TOKEN")]);
+        assert_eq!(asked, [key(".claude/settings.json:/env/GITHUB_TOKEN")]);
     }
 
     #[test]
     fn a_secret_stays_missing_until_the_machine_has_a_value_or_the_remote_drops_it() {
-        let set = key("settings:/env/SET_TOKEN");
-        let dropped = key("settings:/env/DROPPED_TOKEN");
-        let open = key("settings:/env/OPEN_TOKEN");
+        let set = key(".claude/settings.json:/env/SET_TOKEN");
+        let dropped = key(".claude/settings.json:/env/DROPPED_TOKEN");
+        let open = key(".claude/settings.json:/env/OPEN_TOKEN");
         let setup = settings_items(json!({"env": {"SET_TOKEN": "x"}})).unwrap();
         let remote = settings_items(json!({"env": {
-            "SET_TOKEN": "<harness-sync secret settings:/env/SET_TOKEN>",
-            "OPEN_TOKEN": "<harness-sync secret settings:/env/OPEN_TOKEN>"
+            "SET_TOKEN": "<harness-sync secret .claude/settings.json:/env/SET_TOKEN>",
+            "OPEN_TOKEN": "<harness-sync secret .claude/settings.json:/env/OPEN_TOKEN>"
         }}))
         .unwrap();
 

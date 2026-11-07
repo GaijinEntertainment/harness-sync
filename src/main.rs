@@ -93,12 +93,12 @@ enum Command {
     },
     /// Keep an item as it is on this machine: push and pull leave it alone
     Pin {
-        /// Item id, for example `settings:/statusLine`
+        /// Item id, for example `.claude/settings.json:/statusLine`
         item: ItemId,
     },
     /// Let push and pull move a pinned item again
     Unpin {
-        /// Item id, for example `settings:/statusLine`
+        /// Item id, for example `.claude/settings.json:/statusLine`
         item: ItemId,
     },
     /// Manage the secrets of this machine
@@ -131,7 +131,7 @@ enum DeclarationsCommand {
         /// List to change
         #[arg(value_enum)]
         list: declare::List,
-        /// Key paths or item ids, for example `settings:/extraKnownMarketplaces/NAME`
+        /// Key paths or item ids, for example `.claude/settings.json:/extraKnownMarketplaces/NAME`
         #[arg(required = true)]
         entries: Vec<KeyPath>,
         /// Target to change instead of the primary
@@ -186,7 +186,7 @@ enum TargetCommand {
 enum SecretCommand {
     /// Set a secret value on this machine, from a TTY prompt or from stdin
     Set {
-        /// Key path of the secret, for example `settings:/env/GITHUB_TOKEN`
+        /// Key path of the secret, for example `.claude/settings.json:/env/GITHUB_TOKEN`
         key_path: KeyPath,
     },
 }

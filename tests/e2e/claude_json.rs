@@ -43,7 +43,7 @@ fn catalog_keys_of_claude_json_move_and_the_rest_stays_on_each_machine() {
     ] {
         assert!(!objects.contains(private), "the repo holds {private}");
     }
-    let snapshot: Value = serde_json::from_str(&remote.show("main:claude.json")).unwrap();
+    let snapshot: Value = serde_json::from_str(&remote.show("main:.claude.json")).unwrap();
     assert_eq!(
         snapshot,
         json!({"mcpServers": {"kartta": {"type": "stdio", "command": "sh", "args": ["-c", "true"]}}, "theme": "dark"})
@@ -75,8 +75,8 @@ fn claude_config_dir_moves_both_claude_code_files() {
     let output = machine.harness_sync_in_config_dir("alt", &["push"]);
 
     assert_exit(&output, 0);
-    let settings: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
-    let claude: Value = serde_json::from_str(&remote.show("main:claude.json")).unwrap();
+    let settings: Value = serde_json::from_str(&remote.show("main:.claude/settings.json")).unwrap();
+    let claude: Value = serde_json::from_str(&remote.show("main:.claude.json")).unwrap();
     assert_eq!(settings, json!({"model": "opus"}));
     assert_eq!(claude, json!({"theme": "dark"}));
 }

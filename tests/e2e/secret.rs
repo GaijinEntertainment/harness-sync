@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use crate::support::{Machine, Remote, assert_exit};
 
 const TOKEN: &str = "ghp_e2eSecretValue0123456789abcdefABCDEF";
-const PLACEHOLDER: &str = "<harness-sync secret settings:/env/GITHUB_TOKEN>";
+const PLACEHOLDER: &str = "<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>";
 
 fn connected(remote: &Remote, settings: &Value) -> Machine {
     let machine = Machine::new();
@@ -28,7 +28,7 @@ fn a_secret_never_reaches_the_repo_and_each_machine_keeps_its_own_value() {
     let objects = remote.all_objects();
     assert!(objects.contains("GITHUB_TOKEN"), "objects: {objects}");
     assert!(!objects.contains(TOKEN));
-    let snapshot: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+    let snapshot: Value = serde_json::from_str(&remote.show("main:.claude/settings.json")).unwrap();
     assert_eq!(snapshot["env"]["GITHUB_TOKEN"], PLACEHOLDER);
     assert_eq!(
         second.settings(),
@@ -50,7 +50,7 @@ fn a_missing_secret_is_listed_and_is_not_a_local_deletion() {
     assert_exit(&output, 0);
     assert_eq!(second.settings(), json!({}));
     let missing = json!({
-        "id": "settings:/env/GITHUB_TOKEN",
+        "id": ".claude/settings.json:/env/GITHUB_TOKEN",
         "state": "secret_missing",
         "local": null,
         "remote": PLACEHOLDER
@@ -60,7 +60,7 @@ fn a_missing_secret_is_listed_and_is_not_a_local_deletion() {
     assert_eq!(status["items"], json!([missing]));
     second.write_settings(&json!({"model": "opus"}));
     assert_exit(&second.harness_sync(&["push"]), 0);
-    let snapshot: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+    let snapshot: Value = serde_json::from_str(&remote.show("main:.claude/settings.json")).unwrap();
     assert_eq!(
         snapshot,
         json!({"env": {"GITHUB_TOKEN": PLACEHOLDER}, "model": "opus"})
@@ -76,7 +76,10 @@ fn a_token_outside_a_placeholder_blocks_the_push() {
 
     assert_exit(&output, 5);
     assert_eq!(report["outcome"], "secrets_found");
-    assert_eq!(report["secrets_found"], json!(["settings:/env/NOTE"]));
+    assert_eq!(
+        report["secrets_found"],
+        json!([".claude/settings.json:/env/NOTE"])
+    );
     assert!(!String::from_utf8_lossy(&output.stdout).contains(TOKEN));
     assert_eq!(remote.head("main"), None);
 }
@@ -90,7 +93,7 @@ fn secret_set_fills_a_missing_secret_from_stdin() {
     assert_exit(&second.harness_sync(&["pull"]), 0);
 
     let output = second.harness_sync_with_input(
-        &["secret", "set", "settings:/env/GITHUB_TOKEN"],
+        &["secret", "set", ".claude/settings.json:/env/GITHUB_TOKEN"],
         "mine-value\n",
     );
 
@@ -109,7 +112,10 @@ fn secret_set_refuses_a_key_path_that_is_not_a_secret() {
     let remote = Remote::new();
     let machine = connected(&remote, &json!({"model": "opus"}));
 
-    let output = machine.harness_sync_with_input(&["secret", "set", "settings:/model"], "sonnet\n");
+    let output = machine.harness_sync_with_input(
+        &["secret", "set", ".claude/settings.json:/model"],
+        "sonnet\n",
+    );
 
     assert_exit(&output, 1);
     assert_eq!(machine.settings(), json!({"model": "opus"}));
@@ -121,7 +127,7 @@ fn a_key_path_that_the_repo_declares_is_a_secret() {
     remote.commit_file(
         "main",
         "harness-sync.toml",
-        "secrets = [\"settings:/env/INTERNAL_URL\"]\n",
+        "secrets = [\".claude/settings.json:/env/INTERNAL_URL\"]\n",
     );
     let machine = connected(
         &remote,
@@ -133,10 +139,10 @@ fn a_key_path_that_the_repo_declares_is_a_secret() {
 
     assert_exit(&output, 0);
     assert!(!remote.all_objects().contains("build.internal"));
-    let snapshot: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+    let snapshot: Value = serde_json::from_str(&remote.show("main:.claude/settings.json")).unwrap();
     assert_eq!(
         snapshot["env"]["INTERNAL_URL"],
-        "<harness-sync secret settings:/env/INTERNAL_URL>"
+        "<harness-sync secret .claude/settings.json:/env/INTERNAL_URL>"
     );
     assert!(
         remote

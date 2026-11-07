@@ -88,7 +88,7 @@ fn a_file_deleted_on_one_machine_is_deleted_on_the_other() {
     let (report, output) = second.harness_sync_json(&["pull"]);
 
     assert_exit(&output, 0);
-    assert_eq!(report["items"][0]["id"], "file:rules/old.md");
+    assert_eq!(report["items"][0]["id"], ".claude/rules/old.md");
     assert_eq!(second.read_file(".claude/rules/old.md"), None);
     assert_eq!(
         second.read_file(".claude/rules/kept.md").as_deref(),
@@ -97,9 +97,22 @@ fn a_file_deleted_on_one_machine_is_deleted_on_the_other() {
     assert_eq!(second.backup_files(), ["old rule\n"]);
     assert!(
         remote
-            .show("main:files/rules/kept.md")
+            .show("main:.claude/rules/kept.md")
             .contains("kept rule")
     );
+}
+
+#[test]
+fn a_repo_file_outside_the_harness_directories_never_reaches_the_home_directory() {
+    let remote = Remote::new();
+    remote.commit_file("main", "README.md", "About this repo.\n");
+    let machine = connected(&remote);
+
+    let (report, output) = machine.harness_sync_json(&["pull"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(report["items"], json!([]));
+    assert_eq!(machine.read_file("README.md"), None);
 }
 
 #[test]
@@ -114,7 +127,7 @@ fn a_token_in_an_authored_file_blocks_the_push() {
     let (report, output) = machine.harness_sync_json(&["push"]);
 
     assert_exit(&output, 5);
-    assert_eq!(report["secrets_found"], json!(["file:rules/api.md"]));
+    assert_eq!(report["secrets_found"], json!([".claude/rules/api.md"]));
     assert_eq!(remote.head("main"), None);
 }
 
@@ -167,7 +180,7 @@ fn exclude_removes_a_referenced_file_and_a_key_from_the_catalog() {
     remote.commit_file(
         "main",
         "harness-sync.toml",
-        "exclude = [\"file:statusline.sh\", \"settings:/model\"]\n",
+        "exclude = [\".claude/statusline.sh\", \".claude/settings.json:/model\"]\n",
     );
     let first = connected(&remote);
     first.write_settings(&json!({"model": "opus", "statusLine": {"type": "command", "command": "~/.claude/statusline.sh"}}));
@@ -182,7 +195,7 @@ fn exclude_removes_a_referenced_file_and_a_key_from_the_catalog() {
             .into_owned();
     assert!(!tree.contains("statusline.sh"), "tree: {tree}");
     let snapshot: serde_json::Value =
-        serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+        serde_json::from_str(&remote.show("main:.claude/settings.json")).unwrap();
     assert_eq!(
         snapshot,
         json!({"statusLine": {"type": "command", "command": "~/.claude/statusline.sh"}})
@@ -195,7 +208,7 @@ fn include_adds_the_files_of_a_directory_but_never_the_credentials() {
     remote.commit_file(
         "main",
         "harness-sync.toml",
-        "include = [\"file:hooks\", \"file:.credentials.json\"]\n",
+        "include = [\".claude/hooks\", \".claude/.credentials.json\"]\n",
     );
     let first = connected(&remote);
     first.write_file(".claude/hooks/a.sh", "a\n");
@@ -206,8 +219,8 @@ fn include_adds_the_files_of_a_directory_but_never_the_credentials() {
     let output = first.harness_sync(&["push"]);
 
     assert_exit(&output, 0);
-    assert_eq!(remote.show("main:files/hooks/a.sh"), "a\n");
-    assert_eq!(remote.show("main:files/hooks/nested/b.sh"), "b\n");
+    assert_eq!(remote.show("main:.claude/hooks/a.sh"), "a\n");
+    assert_eq!(remote.show("main:.claude/hooks/nested/b.sh"), "b\n");
     let tree =
         String::from_utf8_lossy(&remote.git(&["ls-tree", "-r", "--name-only", "main"]).stdout)
             .into_owned();

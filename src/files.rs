@@ -6,26 +6,26 @@ use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 use crate::atomic;
+use crate::declarations::DECLARATIONS_FILE;
 use crate::git::{Git, TreeChange};
-use crate::item::{ItemId, Items, KeyPath, Source};
-use crate::paths::Paths;
+use crate::item::{ItemId, Items, KeyPath, keyed_file};
+use crate::paths::{self, Paths};
 use crate::setup::Backup;
 use crate::{references, secret};
 
-const SNAPSHOT_DIR: &str = "files";
-const CATALOG_FILES: [&str; 2] = ["CLAUDE.md", "keybindings.json"];
+const CATALOG_FILES: [&str; 2] = [".claude/CLAUDE.md", ".claude/keybindings.json"];
 const CATALOG_DIRS: [&str; 7] = [
-    "rules",
-    "skills",
-    "agents",
-    "commands",
-    "output-styles",
-    "workflows",
-    "themes",
+    ".claude/rules",
+    ".claude/skills",
+    ".claude/agents",
+    ".claude/commands",
+    ".claude/output-styles",
+    ".claude/workflows",
+    ".claude/themes",
 ];
-const SKIPPED_DIRS: [&str; 2] = ["skills/synced", "skills/.trash"];
+const SKIPPED_DIRS: [&str; 2] = [".claude/skills/synced", ".claude/skills/.trash"];
 const SKIPPED_NAMES: [&str; 1] = [".DS_Store"];
-const CREDENTIALS_FILE: &str = ".credentials.json";
+const CREDENTIALS_FILE: &str = ".claude/.credentials.json";
 
 pub(crate) fn load_local(
     git: &Git,
@@ -33,46 +33,45 @@ pub(crate) fn load_local(
     json: &Items,
     include: &[KeyPath],
 ) -> Result<Items> {
-    let claude_dir = &paths.claude_dir;
-    let mut relative = Vec::new();
-    for name in CATALOG_FILES {
-        if is_regular_file(&claude_dir.join(name))? {
-            relative.push(name.to_owned());
+    let mut files = Vec::new();
+    for file in CATALOG_FILES {
+        if is_regular_file(&paths.local(file))? {
+            files.push(file.to_owned());
         }
     }
     for dir in CATALOG_DIRS {
-        walk(claude_dir, dir, &mut relative)?;
+        walk(paths, dir, &mut files)?;
     }
-    for path in include.iter().filter(|path| path.source == Source::File) {
-        let included = path.path.join("/");
-        if included == CREDENTIALS_FILE {
-            continue;
-        }
-        if is_regular_file(&claude_dir.join(&included))? {
-            relative.push(included);
+    for included in include.iter().filter(|path| is_file_include(path)) {
+        if is_regular_file(&paths.local(&included.file))? {
+            files.push(included.file.clone());
         } else {
-            walk(claude_dir, &included, &mut relative)?;
+            walk(paths, &included.file, &mut files)?;
         }
     }
-    let referenced = references::find(paths, json, &relative);
-    relative.extend(referenced);
-    relative.sort();
-    relative.dedup();
-    let absolute: Vec<PathBuf> = relative.iter().map(|path| claude_dir.join(path)).collect();
+    let referenced = references::find(paths, json, &files);
+    files.extend(referenced);
+    files.sort();
+    files.dedup();
+    let absolute: Vec<PathBuf> = files.iter().map(|file| paths.local(file)).collect();
     let blobs = git.hash_files(&absolute)?;
-    Ok(relative
+    Ok(files
         .iter()
         .zip(blobs)
         .zip(&absolute)
-        .map(|((path, blob), file)| (item_id(path), value(&blob, is_executable(file))))
+        .map(|((file, blob), local)| (ItemId::whole_file(file), value(&blob, is_executable(local))))
         .collect())
 }
 
-fn walk(claude_dir: &Path, relative: &str, found: &mut Vec<String>) -> Result<()> {
+fn is_file_include(path: &KeyPath) -> bool {
+    path.path.is_empty() && keyed_file(&path.file).is_none() && path.file != CREDENTIALS_FILE
+}
+
+fn walk(paths: &Paths, relative: &str, found: &mut Vec<String>) -> Result<()> {
     if SKIPPED_DIRS.contains(&relative) {
         return Ok(());
     }
-    let dir = claude_dir.join(relative);
+    let dir = paths.local(relative);
     let entries = match fs::read_dir(&dir) {
         Ok(entries) => entries,
         Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
@@ -94,7 +93,7 @@ fn walk(claude_dir: &Path, relative: &str, found: &mut Vec<String>) -> Result<()
             .file_type()
             .with_context(|| format!("cannot read {}", entry.path().display()))?;
         if kind.is_dir() {
-            walk(claude_dir, &path, found)?;
+            walk(paths, &path, found)?;
         } else if kind.is_file() {
             found.push(path);
         }
@@ -110,41 +109,48 @@ fn is_regular_file(path: &Path) -> Result<bool> {
     }
 }
 
-pub(crate) fn load_snapshot(git: &Git, commit: &str) -> Result<Items> {
+pub(crate) fn load_snapshot(git: &Git, commit: &str, include: &[KeyPath]) -> Result<Items> {
     Ok(git
-        .list_files(commit, SNAPSHOT_DIR)?
+        .list_files(commit)?
         .into_iter()
-        .filter_map(|entry| {
-            let relative = entry.path.strip_prefix(SNAPSHOT_DIR)?.strip_prefix('/')?;
-            Some((item_id(relative), value(&entry.blob, entry.executable)))
+        .filter(|entry| is_snapshot_file(&entry.path, include))
+        .map(|entry| {
+            (
+                ItemId::whole_file(&entry.path),
+                value(&entry.blob, entry.executable),
+            )
         })
         .collect())
 }
 
-pub(crate) fn changes(
-    outgoing: &Items,
-    remote: &Items,
-    claude_dir: &Path,
-) -> Result<Vec<TreeChange>> {
+fn is_snapshot_file(file: &str, include: &[KeyPath]) -> bool {
+    let synced = paths::is_harness_path(file)
+        || include
+            .iter()
+            .any(|path| is_file_include(path) && path.covers(file, &[]));
+    synced && keyed_file(file).is_none() && file != CREDENTIALS_FILE && file != DECLARATIONS_FILE
+}
+
+pub(crate) fn changes(outgoing: &Items, remote: &Items, paths: &Paths) -> Result<Vec<TreeChange>> {
     let mut changes = Vec::new();
-    for (id, value) in outgoing.iter().filter(|(id, _)| id.source == Source::File) {
+    for (id, value) in outgoing.iter().filter(|(id, _)| id.is_whole_file()) {
         if remote.get(id) == Some(value) {
             continue;
         }
-        let file = claude_dir.join(relative(id));
+        let file = paths.local(&id.file);
         let content = fs::read(&file).with_context(|| format!("cannot read {}", file.display()))?;
         changes.push(TreeChange::Write {
-            path: snapshot_path(id),
+            path: id.file.clone(),
             content,
             executable: is_marked_executable(value),
         });
     }
     for id in remote
         .keys()
-        .filter(|id| id.source == Source::File && !outgoing.contains_key(id))
+        .filter(|id| id.is_whole_file() && !outgoing.contains_key(id))
     {
         changes.push(TreeChange::Delete {
-            path: snapshot_path(id),
+            path: id.file.clone(),
         });
     }
     Ok(changes)
@@ -157,9 +163,8 @@ pub(crate) fn token_like(changes: &[TreeChange]) -> Vec<KeyPath> {
             let TreeChange::Write { path, content, .. } = change else {
                 return None;
             };
-            let relative = path.strip_prefix(SNAPSHOT_DIR)?.strip_prefix('/')?;
             let text = std::str::from_utf8(content).ok()?;
-            secret::looks_like_token(text).then(|| item_id(relative).key_path())
+            secret::looks_like_token(text).then(|| ItemId::whole_file(path).key_path())
         })
         .collect()
 }
@@ -181,10 +186,9 @@ pub(crate) fn write_local(
         .collect();
     let mut contents = git.read_files(&blobs)?.into_iter();
     for (id, value) in writes {
-        let relative = relative(id);
-        let file = paths.claude_dir.join(&relative);
+        let file = paths.local(&id.file);
         match fs::read(&file) {
-            Ok(old) => backup.save(&Path::new(SNAPSHOT_DIR).join(&relative), &old)?,
+            Ok(old) => backup.save(Path::new(&id.file), &old)?,
             Err(err) if err.kind() == ErrorKind::NotFound => {}
             Err(err) => return Err(err).with_context(|| format!("cannot read {}", file.display())),
         }
@@ -206,7 +210,7 @@ pub(crate) fn write_local(
 }
 
 pub(crate) fn carry_executable(local: &mut Items, known: &[&Items]) {
-    for (id, value) in local.iter_mut().filter(|(id, _)| id.source == Source::File) {
+    for (id, value) in local.iter_mut().filter(|(id, _)| id.is_whole_file()) {
         let executable = known
             .iter()
             .find_map(|items| items.get(id))
@@ -218,21 +222,6 @@ pub(crate) fn carry_executable(local: &mut Items, known: &[&Items]) {
             }
         }
     }
-}
-
-fn item_id(relative: &str) -> ItemId {
-    ItemId {
-        source: Source::File,
-        path: relative.split('/').map(str::to_owned).collect(),
-    }
-}
-
-fn relative(id: &ItemId) -> String {
-    id.path.join("/")
-}
-
-pub(crate) fn snapshot_path(id: &ItemId) -> String {
-    format!("{SNAPSHOT_DIR}/{}", relative(id))
 }
 
 fn value(blob: &str, executable: bool) -> Value {

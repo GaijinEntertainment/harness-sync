@@ -18,7 +18,7 @@ fn push_to_an_empty_remote_creates_the_first_remote_snapshot() {
     let head = remote.head("main").expect("the push created branch main");
     assert_eq!(report["remote_commit"], head.as_str());
     assert_eq!(report["base_commit"], head.as_str());
-    let snapshot: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+    let snapshot: Value = serde_json::from_str(&remote.show("main:.claude/settings.json")).unwrap();
     assert_eq!(snapshot, settings);
     let (status, _) = machine.harness_sync_json(&["status"]);
     assert_eq!(status["items"], json!([]));

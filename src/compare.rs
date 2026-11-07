@@ -107,8 +107,14 @@ mod tests {
         assert_eq!(
             states(&sides),
             [
-                ("settings:/a".to_owned(), ItemState::LocalChange),
-                ("settings:/b".to_owned(), ItemState::RemoteChange)
+                (
+                    ".claude/settings.json:/a".to_owned(),
+                    ItemState::LocalChange
+                ),
+                (
+                    ".claude/settings.json:/b".to_owned(),
+                    ItemState::RemoteChange
+                )
             ]
         );
     }
@@ -120,8 +126,14 @@ mod tests {
         assert_eq!(
             states(&sides),
             [
-                ("settings:/a".to_owned(), ItemState::LocalChange),
-                ("settings:/b".to_owned(), ItemState::RemoteChange)
+                (
+                    ".claude/settings.json:/a".to_owned(),
+                    ItemState::LocalChange
+                ),
+                (
+                    ".claude/settings.json:/b".to_owned(),
+                    ItemState::RemoteChange
+                )
             ]
         );
     }
@@ -132,7 +144,7 @@ mod tests {
 
         assert_eq!(
             states(&sides),
-            [("settings:/a".to_owned(), ItemState::Conflict)]
+            [(".claude/settings.json:/a".to_owned(), ItemState::Conflict)]
         );
     }
 
@@ -143,9 +155,15 @@ mod tests {
         assert_eq!(
             states(&sides),
             [
-                ("settings:/a".to_owned(), ItemState::LocalChange),
-                ("settings:/b".to_owned(), ItemState::RemoteChange),
-                ("settings:/c".to_owned(), ItemState::Conflict)
+                (
+                    ".claude/settings.json:/a".to_owned(),
+                    ItemState::LocalChange
+                ),
+                (
+                    ".claude/settings.json:/b".to_owned(),
+                    ItemState::RemoteChange
+                ),
+                (".claude/settings.json:/c".to_owned(), ItemState::Conflict)
             ]
         );
     }

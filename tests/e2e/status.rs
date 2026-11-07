@@ -30,8 +30,8 @@ fn status_against_an_empty_remote_lists_every_local_item_as_a_local_change() {
     assert_eq!(
         report["items"],
         json!([
-            {"id": "settings:/effortLevel", "state": "local_change", "local": "high", "remote": null},
-            {"id": "settings:/env/A", "state": "local_change", "local": "1", "remote": null}
+            {"id": ".claude/settings.json:/effortLevel", "state": "local_change", "local": "high", "remote": null},
+            {"id": ".claude/settings.json:/env/A", "state": "local_change", "local": "1", "remote": null}
         ])
     );
 }

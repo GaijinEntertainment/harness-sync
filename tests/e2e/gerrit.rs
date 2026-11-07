@@ -103,8 +103,12 @@ fn a_declarations_change_on_a_gerrit_target_goes_for_review() {
     );
     let branch_head = review.head("main");
 
-    let (report, output) =
-        machine.harness_sync_json(&["declarations", "add", "exclude", "settings:/model"]);
+    let (report, output) = machine.harness_sync_json(&[
+        "declarations",
+        "add",
+        "exclude",
+        ".claude/settings.json:/model",
+    ]);
 
     assert_exit(&output, 0);
     assert_eq!(review.head("main"), branch_head);
@@ -113,7 +117,7 @@ fn a_declarations_change_on_a_gerrit_target_goes_for_review() {
     assert!(
         review
             .show(&format!("{change}:harness-sync.toml"))
-            .contains("settings:/model")
+            .contains(".claude/settings.json:/model")
     );
     assert_eq!(report["pushes"][0]["review"]["change_url"], CHANGE_URL);
 }

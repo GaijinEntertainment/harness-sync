@@ -108,7 +108,7 @@ different values is a conflict, and pull stops with exit code 3 before it writes
 Choose a side per item with `--take`, or for every remaining conflict with `--prefer`:
 
 ```sh
-harness-sync pull --take settings:/model=remote --prefer local
+harness-sync pull --take .claude/settings.json:/model=remote --prefer local
 ```
 
 When stdin and stdout are a terminal, pull asks for each conflict that no flag settles. `--no-input` turns every prompt
@@ -116,9 +116,10 @@ off.
 
 ## Secrets
 
-Push replaces each secret string with a placeholder such as `<harness-sync secret settings:/env/GITHUB_TOKEN>`, so the
-repo never holds the value. A string is a secret when a key on its path, in any case, is `Authorization` or ends with
-`TOKEN`, `SECRET`, `PASSWORD`, `HEADERS`, or `_KEY`. The repo can declare more key paths; see
+Push replaces each secret string with a placeholder such as
+`<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>`, so the repo never holds the value. A string is a secret
+when a key on its path, in any case, is `Authorization` or ends with `TOKEN`, `SECRET`, `PASSWORD`, `HEADERS`, or
+`_KEY`. The repo can declare more key paths; see
 [`harness-sync.toml`](#harness-synctoml).
 
 Before it commits, push scans the outgoing snapshot, authored files included, for token-like strings outside a
@@ -130,7 +131,7 @@ on a terminal; without one, pull leaves the key out and lists it as `secret_miss
 deletion: the next push keeps the placeholder. Set the value later from a prompt or from stdin:
 
 ```sh
-printf '%s' "$TOKEN" | harness-sync secret set settings:/env/GITHUB_TOKEN
+printf '%s' "$TOKEN" | harness-sync secret set .claude/settings.json:/env/GITHUB_TOKEN
 ```
 
 ## Per-machine differences
@@ -151,8 +152,8 @@ snapshot of its primary target, and a push to another target applies that target
 machine; the command commits the new file to the repo, or opens a change for a Gerrit target:
 
 ```sh
-harness-sync declarations add exclude settings:/extraKnownMarketplaces/yatai
-harness-sync declarations remove exclude settings:/model --target mirror
+harness-sync declarations add exclude .claude/settings.json:/extraKnownMarketplaces/yatai
+harness-sync declarations remove exclude .claude/settings.json:/model --target mirror
 harness-sync declarations show
 ```
 
@@ -160,13 +161,14 @@ The command rewrites the file and drops its comments. You can also edit the file
 the files it does not manage. The file looks like this:
 
 ```toml
-secrets = ["settings:/env/INTERNAL_WEBHOOK"]
-include = ["file:hooks", "claude:/autoCompactEnabled"]
-exclude = ["file:statusline-mac.sh", "settings:/model"]
+secrets = [".claude/settings.json:/env/INTERNAL_WEBHOOK"]
+include = [".claude/hooks", ".claude.json:/autoCompactEnabled"]
+exclude = [".claude/statusline-mac.sh", ".claude/settings.json:/model"]
 ```
 
 - `secrets` marks every string under each key path as a secret.
-- `include` adds files, whole directories, and `~/.claude.json` keys to the catalog. It never adds the credentials file.
+- `include` adds files, whole directories, and `~/.claude.json` keys to the catalog. A file or directory outside
+  `~/.claude` syncs too, at its path under the home directory. `include` never adds the credentials file.
 - `exclude` removes every item under each entry, on every machine. `harness-sync declarations add exclude` also removes
   those items from the repo in the same commit.
 
@@ -197,13 +199,13 @@ A report looks like this:
   "remote_commit": "c7f9a769115a0e7872e918fa2504468b6c12b22f",
   "items": [
     {
-      "id": "settings:/env/GITHUB_TOKEN",
+      "id": ".claude/settings.json:/env/GITHUB_TOKEN",
       "state": "remote_change",
       "local": null,
-      "remote": "<harness-sync secret settings:/env/GITHUB_TOKEN>"
+      "remote": "<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>"
     },
     {
-      "id": "settings:/model",
+      "id": ".claude/settings.json:/model",
       "state": "conflict",
       "local": "sonnet",
       "remote": "opus"
@@ -225,13 +227,16 @@ A report looks like this:
   `{target, secrets, include, exclude}` for the `declarations` commands.
 - A file item shows its git blob id and executable bit in place of its content.
 
-Item ids name what `--take`, `pin`, and `unpin` act on:
+Item ids name what `--take`, `pin`, and `unpin` act on. An item id is the path of the file relative to the home
+directory, and for a JSON key the path, `:`, and a JSON pointer:
 
-- `settings:/<JSON pointer>`, for example `settings:/env/EDITOR`
-- `claude:/<JSON pointer>`, for example `claude:/mcpServers/kartta`
-- `file:<path under ~/.claude>`, for example `file:rules/rust.md`
+- `.claude/settings.json:/env/EDITOR`
+- `.claude.json:/mcpServers/kartta`
+- `.claude/rules/rust.md`
 
-A key path for `secret set` has the same form as an item id and can point deeper into an item.
+The repo holds each file at the same path, so `.claude/settings.json` in the repo holds the synced keys of
+`~/.claude/settings.json`. A key path for `secret set` has the same form as an item id and can point deeper into an
+item.
 
 ## Limitations
 

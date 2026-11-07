@@ -9,21 +9,25 @@ fn an_added_exclude_entry_reaches_the_repo_and_the_next_push_honors_it() {
     machine.write_settings(&json!({"model": "opus", "effortLevel": "high"}));
     assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
 
-    let (report, output) =
-        machine.harness_sync_json(&["declarations", "add", "exclude", "settings:/model"]);
+    let (report, output) = machine.harness_sync_json(&[
+        "declarations",
+        "add",
+        "exclude",
+        ".claude/settings.json:/model",
+    ]);
 
     assert_exit(&output, 0);
     assert_eq!(
         report["declarations"]["exclude"],
-        json!(["settings:/model"])
+        json!([".claude/settings.json:/model"])
     );
     assert!(
         remote
             .show("main:harness-sync.toml")
-            .contains("settings:/model")
+            .contains(".claude/settings.json:/model")
     );
     assert_exit(&machine.harness_sync(&["push"]), 0);
-    let settings: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+    let settings: Value = serde_json::from_str(&remote.show("main:.claude/settings.json")).unwrap();
     assert_eq!(settings, json!({"effortLevel": "high"}));
 }
 
@@ -40,14 +44,14 @@ fn an_exclude_entry_removes_the_items_that_the_repo_already_holds() {
         "declarations",
         "add",
         "exclude",
-        "settings:/model",
-        "file:skills/old",
+        ".claude/settings.json:/model",
+        ".claude/skills/old",
     ]);
 
     assert_exit(&output, 0);
-    let settings: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+    let settings: Value = serde_json::from_str(&remote.show("main:.claude/settings.json")).unwrap();
     assert_eq!(settings, json!({"effortLevel": "high"}));
-    let skill = remote.git(&["cat-file", "-e", "main:files/skills/old/SKILL.md"]);
+    let skill = remote.git(&["cat-file", "-e", "main:.claude/skills/old/SKILL.md"]);
     assert!(!skill.status.success());
     let (status, _) = machine.harness_sync_json(&["status"]);
     assert_eq!(status["items"], json!([]));
@@ -65,16 +69,16 @@ fn the_push_after_a_secret_declaration_masks_the_value_in_the_repo() {
         "declarations",
         "add",
         "secrets",
-        "settings:/env/INTERNAL_URL",
+        ".claude/settings.json:/env/INTERNAL_URL",
     ]);
     let pushed = machine.harness_sync(&["push"]);
 
     assert_exit(&declared, 0);
     assert_exit(&pushed, 0);
-    let settings: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+    let settings: Value = serde_json::from_str(&remote.show("main:.claude/settings.json")).unwrap();
     assert_eq!(
         settings,
-        json!({"env": {"INTERNAL_URL": "<harness-sync secret settings:/env/INTERNAL_URL>"}})
+        json!({"env": {"INTERNAL_URL": "<harness-sync secret .claude/settings.json:/env/INTERNAL_URL>"}})
     );
 }
 
@@ -84,20 +88,25 @@ fn a_change_of_one_list_keeps_the_other_lists_and_keys() {
     remote.commit_file(
         "main",
         "harness-sync.toml",
-        "secrets = [\"settings:/env/INTERNAL_URL\"]\nexclude = [\"settings:/model\"]\nfuture = 1\n",
+        "secrets = [\".claude/settings.json:/env/INTERNAL_URL\"]\nexclude = [\".claude/settings.json:/model\"]\nfuture = 1\n",
     );
     let machine = Machine::new();
     assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
 
-    let added = machine.harness_sync(&["declarations", "add", "include", "file:hooks"]);
-    let removed = machine.harness_sync(&["declarations", "remove", "exclude", "settings:/model"]);
+    let added = machine.harness_sync(&["declarations", "add", "include", ".claude/hooks"]);
+    let removed = machine.harness_sync(&[
+        "declarations",
+        "remove",
+        "exclude",
+        ".claude/settings.json:/model",
+    ]);
 
     assert_exit(&added, 0);
     assert_exit(&removed, 0);
     let file: toml::Table = remote.show("main:harness-sync.toml").parse().unwrap();
     assert_eq!(
         file,
-        "future = 1\ninclude = [\"file:hooks\"]\nsecrets = [\"settings:/env/INTERNAL_URL\"]\n"
+        "future = 1\ninclude = [\".claude/hooks\"]\nsecrets = [\".claude/settings.json:/env/INTERNAL_URL\"]\n"
             .parse()
             .unwrap()
     );
@@ -109,13 +118,18 @@ fn an_entry_that_is_already_there_makes_no_commit() {
     remote.commit_file(
         "main",
         "harness-sync.toml",
-        "exclude = [\"settings:/model\"]\n",
+        "exclude = [\".claude/settings.json:/model\"]\n",
     );
     let machine = Machine::new();
     assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
     let head = remote.head("main");
 
-    let output = machine.harness_sync(&["declarations", "add", "exclude", "settings:/model"]);
+    let output = machine.harness_sync(&[
+        "declarations",
+        "add",
+        "exclude",
+        ".claude/settings.json:/model",
+    ]);
 
     assert_exit(&output, 0);
     assert!(text(&output.stdout).contains("nothing to change"));
@@ -129,7 +143,7 @@ fn show_lists_the_declarations_of_another_target() {
     mirror.commit_file(
         "main",
         "harness-sync.toml",
-        "exclude = [\"settings:/model\"]\n",
+        "exclude = [\".claude/settings.json:/model\"]\n",
     );
     let machine = Machine::new();
     assert_exit(&machine.harness_sync(&["init", &primary.url()]), 0);
@@ -144,6 +158,6 @@ fn show_lists_the_declarations_of_another_target() {
     assert_exit(&output, 0);
     assert_eq!(
         report["declarations"],
-        json!({"target": "mirror", "secrets": [], "include": [], "exclude": ["settings:/model"]})
+        json!({"target": "mirror", "secrets": [], "include": [], "exclude": [".claude/settings.json:/model"]})
     );
 }
