@@ -4,6 +4,7 @@ mod atomic;
 mod compare;
 mod config;
 mod declarations;
+mod declare;
 mod executables;
 mod files;
 mod gerrit;
@@ -110,6 +111,45 @@ enum Command {
         #[command(subcommand)]
         command: TargetCommand,
     },
+    /// Show or change the secrets, include, and exclude lists in cc-sync.toml of a target
+    Declarations {
+        #[command(subcommand)]
+        command: DeclarationsCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum DeclarationsCommand {
+    /// Show the lists of a target
+    Show {
+        /// Target to read instead of the primary
+        #[arg(long)]
+        target: Option<String>,
+    },
+    /// Add entries to a list, as a commit to the target
+    Add {
+        /// List to change
+        #[arg(value_enum)]
+        list: declare::List,
+        /// Key paths or item ids, for example `settings:/extraKnownMarketplaces/NAME`
+        #[arg(required = true)]
+        entries: Vec<KeyPath>,
+        /// Target to change instead of the primary
+        #[arg(long)]
+        target: Option<String>,
+    },
+    /// Remove entries from a list, as a commit to the target
+    Remove {
+        /// List to change
+        #[arg(value_enum)]
+        list: declare::List,
+        /// Key paths or item ids to remove
+        #[arg(required = true)]
+        entries: Vec<KeyPath>,
+        /// Target to change instead of the primary
+        #[arg(long)]
+        target: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -199,6 +239,19 @@ fn execute(cli: &Cli) -> Result<Report> {
             TargetCommand::Remove { name } => target::remove(&paths, name),
             TargetCommand::Primary { name } => target::set_primary(&paths, name),
             TargetCommand::List => target::list(&paths),
+        },
+        Command::Declarations { command } => match command {
+            DeclarationsCommand::Show { target } => declare::show(&paths, target.as_deref()),
+            DeclarationsCommand::Add {
+                list,
+                entries,
+                target,
+            } => declare::add(&paths, target.as_deref(), *list, entries),
+            DeclarationsCommand::Remove {
+                list,
+                entries,
+                target,
+            } => declare::remove(&paths, target.as_deref(), *list, entries),
         },
     }
 }

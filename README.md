@@ -145,8 +145,18 @@ Pull warns when a synced status line, hook, or MCP server names a program that i
 
 ## cc-sync.toml
 
-The repo can hold a `cc-sync.toml` at its root. Every machine reads it from the remote snapshot. Edit it in any clone of
-the repo; push keeps the files it does not manage.
+Each repo can hold a `cc-sync.toml` at its root with the settings of that repo. A machine reads it from the remote
+snapshot of its primary target, and a push to another target applies that target's own file. Change it from any
+machine; the command commits the new file to the repo, or opens a change for a Gerrit target:
+
+```sh
+cc-sync declarations add exclude settings:/extraKnownMarketplaces/yatai
+cc-sync declarations remove exclude settings:/model --target mirror
+cc-sync declarations show
+```
+
+The command rewrites the file and drops its comments. You can also edit the file in any clone of the repo; push keeps
+the files it does not manage. The file looks like this:
 
 ```toml
 secrets = ["settings:/env/INTERNAL_WEBHOOK"]
@@ -157,6 +167,9 @@ exclude = ["file:statusline-mac.sh", "settings:/model"]
 - `secrets` marks every string under each key path as a secret.
 - `include` adds files, whole directories, and `~/.claude.json` keys to the catalog. It never adds the credentials file.
 - `exclude` removes every item under each entry, on every machine.
+
+A secret that a push sent before its key path was declared stays in the git history of the repo; the next push replaces
+it with a placeholder.
 
 ## Operating cc-sync from an agent
 
@@ -206,7 +219,8 @@ A report looks like this:
 - `pushes` lists `{target, outcome, commit, review, items}` for each target that a push reached; `review` holds
   the pushed `commit` and the `change_url` for a Gerrit target. The top-level `items`,
   `base_commit`, and `remote_commit` belong to the primary target; the `items` of another target list what the push
-  replaced there. `targets` lists `{name, url, branch, kind, primary}` for `target list`.
+  replaced there. `targets` lists `{name, url, branch, kind, primary}` for `target list`, and `declarations` lists
+  `{target, secrets, include, exclude}` for the `declarations` commands.
 - A file item shows its git blob id and executable bit in place of its content.
 
 Item ids name what `--take`, `pin`, and `unpin` act on:

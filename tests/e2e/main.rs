@@ -3,6 +3,8 @@
 #[cfg(test)]
 mod claude_json;
 #[cfg(test)]
+mod declarations;
+#[cfg(test)]
 mod files;
 #[cfg(test)]
 mod gerrit;

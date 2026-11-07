@@ -6,7 +6,7 @@ use serde::Deserialize;
 use crate::git::Git;
 use crate::item::{ItemId, KeyPath};
 
-const DECLARATIONS_FILE: &str = "cc-sync.toml";
+pub(crate) const DECLARATIONS_FILE: &str = "cc-sync.toml";
 
 #[derive(Debug, Default)]
 pub(crate) struct Declarations {
