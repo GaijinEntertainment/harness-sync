@@ -3,7 +3,7 @@ use anyhow::{Context, Result, ensure};
 use crate::config::Config;
 use crate::item::ItemId;
 use crate::paths::Paths;
-use crate::report::{Outcome, Report};
+use crate::report::Report;
 
 pub(crate) fn run(paths: &Paths, id: &ItemId, pinned: bool) -> Result<Report> {
     ensure!(
@@ -35,15 +35,5 @@ pub(crate) fn run(paths: &Paths, id: &ItemId, pinned: bool) -> Result<Report> {
         (false, true) => format!("unpinned {id}: push and pull move it again"),
         (false, false) => format!("{id} is not pinned"),
     };
-    Ok(Report {
-        command: if pinned { "pin" } else { "unpin" },
-        outcome: Outcome::Ok,
-        base_commit: None,
-        remote_commit: None,
-        items: Vec::new(),
-        secrets_found: Vec::new(),
-        missing_executables: Vec::new(),
-        undeclared_marketplaces: Vec::new(),
-        summary,
-    })
+    Ok(Report::new(if pinned { "pin" } else { "unpin" }, summary))
 }

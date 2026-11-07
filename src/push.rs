@@ -65,15 +65,11 @@ pub(crate) fn run(paths: &Paths) -> Result<Report> {
 
 fn report(session: &Session, differences: &[Difference<'_>], summary: String) -> Report {
     Report {
-        command: "push",
-        outcome: Outcome::Ok,
         base_commit: session.base_commit.clone(),
         remote_commit: session.remote_commit.clone(),
         items: differences.iter().map(ItemReport::from).collect(),
-        secrets_found: Vec::new(),
-        missing_executables: Vec::new(),
         undeclared_marketplaces: session.undeclared_marketplaces.clone(),
-        summary,
+        ..Report::new("push", summary)
     }
 }
 
