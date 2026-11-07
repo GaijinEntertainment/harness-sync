@@ -112,7 +112,7 @@ phase ends with the gates of `.claude/rules/rust.md` and an end-to-end test agai
 
 **Acceptance criteria:**
 
-- [x] ADR 1.16 pending line names only the move into `harness-sync-git`, which Phase 5 makes.
+- [x] ADR 1.16 pending line removed.
 
 ## Phase 5: The workspace split and the docs
 
@@ -133,8 +133,8 @@ phase ends with the gates of `.claude/rules/rust.md` and an end-to-end test agai
 
 **Acceptance criteria:**
 
-- [ ] ADR 1.15 pending line removed.
-- [ ] README documents Claude Code and pi, the harness commands, and path ids.
+- [x] ADR 1.15 pending line removed.
+- [x] README documents Claude Code and pi, the harness commands, and path ids.
 
 ## Phase Sequence
 
