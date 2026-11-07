@@ -25,8 +25,8 @@ paths:
 
 - `std::assert_matches` is unstable through Rust 1.99, and its import does not resolve. Write
   `assert!(matches!(value, Pattern))`. Do not write a `match` that ends in `panic!`.
-- End-to-end tests in `tests/` run the `cc-sync` binary with a temporary home directory and a bare git repo on disk.
-  Never let a test read or write the real `~/.claude`, `~/.claude.json`, or `~/.cc-sync`.
+- End-to-end tests in `tests/` run the `harness-sync` binary with a temporary home directory and a bare git repo on
+  disk. Never let a test read or write the real `~/.claude`, `~/.claude.json`, or `~/.harness-sync`.
 
 </testing>
 

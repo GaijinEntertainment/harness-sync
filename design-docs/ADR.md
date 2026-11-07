@@ -17,6 +17,6 @@ lost, and what would reopen it.
 - [1.6 Change only synced values in Claude Code files, with a backup and an atomic replace](/design-docs/adr/1.6-target-file-writes.md)
 - [1.7 Run git operations through the git executable](/design-docs/adr/1.7-git-access.md)
 - [1.8 Build a CLI that an agent can operate without a TTY, and no TUI](/design-docs/adr/1.8-operator-interface.md)
-- [1.9 Write cc-sync in Rust](/design-docs/adr/1.9-implementation-language.md)
+- [1.9 Write harness-sync in Rust](/design-docs/adr/1.9-implementation-language.md)
 - [1.10 Pull from one primary target and push to the other targets on request](/design-docs/adr/1.10-sync-targets.md)
 - [1.11 Send the snapshot to a Gerrit target as a change for review, and never merge it](/design-docs/adr/1.11-gerrit-targets.md)
