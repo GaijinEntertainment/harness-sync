@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 
 use crate::declarations::Declarations;
 use crate::git::{Git, TreeChange};
-use crate::harness::{KeyedFile, keyed_files};
+use crate::harness::{KeyedFile, Selection, keyed_files};
 use crate::item::{Items, KeyPath, json_document, json_items};
 use crate::json_edit::{self, Edit};
 use crate::paths::Paths;
@@ -38,9 +38,17 @@ impl Backup {
     }
 }
 
-pub(crate) fn load_local(paths: &Paths, git: &Git, declarations: &Declarations) -> Result<Items> {
+pub(crate) fn load_local(
+    paths: &Paths,
+    git: &Git,
+    declarations: &Declarations,
+    selection: &Selection,
+) -> Result<Items> {
     let mut items = Items::new();
-    for keyed in keyed_files() {
+    for keyed in selection
+        .harnesses()
+        .flat_map(|harness| harness.keyed_files)
+    {
         let path = paths.local(keyed.path);
         match fs::read(&path) {
             Ok(bytes) => items.extend(parse(keyed, &bytes, &path, &declarations.include)?),
@@ -49,8 +57,8 @@ pub(crate) fn load_local(paths: &Paths, git: &Git, declarations: &Declarations) 
         }
     }
     items.retain(|id, _| !declarations.excludes(id));
-    let files = files::load_local(git, paths, &items, &declarations.include)?;
-    items.extend(files);
+    let catalog = files::catalog(paths, &items, &declarations.include, selection)?;
+    items.extend(files::load_local(git, paths, &catalog)?);
     items.retain(|id, _| !declarations.excludes(id));
     Ok(items)
 }
@@ -59,9 +67,10 @@ pub(crate) fn load_snapshot(
     git: &Git,
     commit: Option<&str>,
     declarations: &Declarations,
+    selection: &Selection,
 ) -> Result<Items> {
     let mut items = load_whole_snapshot(git, commit, &declarations.include)?;
-    items.retain(|id, _| !declarations.excludes(id));
+    items.retain(|id, _| selection.syncs(&id.file) && !declarations.excludes(id));
     Ok(items)
 }
 

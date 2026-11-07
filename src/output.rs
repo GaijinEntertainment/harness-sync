@@ -132,6 +132,11 @@ fn human(report: &Report) -> String {
             target.name, target.url, target.branch
         );
     }
+    for harness in &report.harnesses {
+        let synced = if harness.synced { "  (synced)" } else { "" };
+        // ignored: writing to a String cannot fail
+        let _ = writeln!(text, "  {}{synced}", harness.name);
+    }
     text
 }
 

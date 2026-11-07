@@ -10,6 +10,7 @@ mod files;
 mod gerrit;
 mod git;
 mod harness;
+mod harnesses;
 mod home;
 mod init;
 mod item;
@@ -73,6 +74,9 @@ enum Command {
         /// The remote is a Gerrit project: push sends each snapshot as a change for review
         #[arg(long)]
         gerrit: bool,
+        /// Harness that this machine syncs; repeat it for several. Without it, each harness whose directory exists
+        #[arg(long = "harness", value_name = "NAME")]
+        harnesses: Vec<String>,
     },
     /// List the supported items that differ from the remote snapshot
     Status,
@@ -110,6 +114,11 @@ enum Command {
     Target {
         #[command(subcommand)]
         command: TargetCommand,
+    },
+    /// Manage the harnesses that this machine syncs
+    Harness {
+        #[command(subcommand)]
+        command: HarnessCommand,
     },
     /// Show or change the secrets, include, and exclude lists in harness-sync.toml of a target
     Declarations {
@@ -183,6 +192,22 @@ enum TargetCommand {
 }
 
 #[derive(Debug, Subcommand)]
+enum HarnessCommand {
+    /// Sync a harness on this machine
+    Add {
+        /// Name of the harness, for example `claude-code`
+        name: String,
+    },
+    /// Stop syncing a harness on this machine; its files stay as they are
+    Remove {
+        /// Name of the harness
+        name: String,
+    },
+    /// List the harnesses that harness-sync knows and the ones this machine syncs
+    List,
+}
+
+#[derive(Debug, Subcommand)]
 enum SecretCommand {
     /// Set a secret value on this machine, from a TTY prompt or from stdin
     Set {
@@ -213,7 +238,8 @@ fn execute(cli: &Cli) -> Result<Report> {
             branch,
             name,
             gerrit,
-        } => init::run(&paths, name, target(remote, branch, *gerrit)),
+            harnesses,
+        } => init::run(&paths, name, target(remote, branch, *gerrit), harnesses),
         Command::Status => status::run(&paths),
         Command::Push { to } => push::run(&paths, to),
         Command::Pull { prefer, takes } => pull::run(
@@ -239,6 +265,11 @@ fn execute(cli: &Cli) -> Result<Report> {
             TargetCommand::Remove { name } => target::remove(&paths, name),
             TargetCommand::Primary { name } => target::set_primary(&paths, name),
             TargetCommand::List => target::list(&paths),
+        },
+        Command::Harness { command } => match command {
+            HarnessCommand::Add { name } => harnesses::add(&paths, name),
+            HarnessCommand::Remove { name } => harnesses::remove(&paths, name),
+            HarnessCommand::List => harnesses::list(&paths),
         },
         Command::Declarations { command } => match command {
             DeclarationsCommand::Show { target } => declare::show(&paths, target.as_deref()),

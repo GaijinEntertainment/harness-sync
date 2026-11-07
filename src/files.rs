@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use crate::atomic;
 use crate::declarations::DECLARATIONS_FILE;
 use crate::git::{Git, TreeChange};
-use crate::harness::{self, HARNESSES, keyed_file};
+use crate::harness::{self, Selection, keyed_file};
 use crate::item::{ItemId, Items, KeyPath};
 use crate::paths::Paths;
 use crate::setup::Backup;
@@ -16,14 +16,14 @@ use crate::{references, secret};
 
 const SKIPPED_NAMES: [&str; 1] = [".DS_Store"];
 
-pub(crate) fn load_local(
-    git: &Git,
+pub(crate) fn catalog(
     paths: &Paths,
     json: &Items,
     include: &[KeyPath],
-) -> Result<Items> {
+    selection: &Selection,
+) -> Result<Vec<String>> {
     let mut files = Vec::new();
-    for harness in HARNESSES {
+    for harness in selection.harnesses() {
         for &file in harness.files {
             if is_regular_file(&paths.local(file))? {
                 files.push(file.to_owned());
@@ -33,7 +33,10 @@ pub(crate) fn load_local(
             walk(paths, dir, &mut files)?;
         }
     }
-    for included in include.iter().filter(|path| is_file_include(path)) {
+    let included = include
+        .iter()
+        .filter(|path| is_file_include(path) && selection.syncs(&path.file));
+    for included in included {
         if is_regular_file(&paths.local(&included.file))? {
             files.push(included.file.clone());
         } else {
@@ -41,9 +44,13 @@ pub(crate) fn load_local(
         }
     }
     let referenced = references::find(paths, json, &files);
-    files.extend(referenced);
+    files.extend(referenced.into_iter().filter(|file| selection.syncs(file)));
     files.sort();
     files.dedup();
+    Ok(files)
+}
+
+pub(crate) fn load_local(git: &Git, paths: &Paths, files: &[String]) -> Result<Items> {
     let absolute: Vec<PathBuf> = files.iter().map(|file| paths.local(file)).collect();
     let blobs = git.hash_files(&absolute)?;
     Ok(files

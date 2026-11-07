@@ -59,6 +59,7 @@ const CLAUDE_JSON_KEYS: [&str; 29] = [
 ];
 
 pub(super) static HARNESS: Harness = Harness {
+    name: "claude-code",
     roots: &[
         Root {
             path: ".claude.json",

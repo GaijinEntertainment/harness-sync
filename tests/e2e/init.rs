@@ -44,6 +44,37 @@ fn init_with_another_remote_is_refused() {
 }
 
 #[test]
+fn init_syncs_each_harness_whose_directory_exists() {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+
+    let (report, output) = machine.harness_sync_json(&["harness", "list"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(
+        report["harnesses"],
+        serde_json::json!([{"name": "claude-code", "synced": true}])
+    );
+}
+
+#[test]
+fn init_without_a_harness_directory_needs_the_harnesses_named() {
+    let remote = Remote::new();
+    let machine = Machine::without_harnesses();
+
+    let refused = machine.harness_sync(&["init", &remote.url()]);
+    let unknown = machine.harness_sync(&["init", &remote.url(), "--harness", "vim"]);
+    let named = machine.harness_sync(&["init", &remote.url(), "--harness", "claude-code"]);
+
+    assert_exit(&refused, 1);
+    assert!(text(&refused.stderr).contains("--harness"));
+    assert_exit(&unknown, 1);
+    assert!(text(&unknown.stderr).contains("claude-code"));
+    assert_exit(&named, 0);
+}
+
+#[test]
 fn init_with_an_unreachable_remote_fails_without_a_config() {
     let machine = Machine::new();
     let missing = machine.home().join("no-such-remote.git");

@@ -42,6 +42,8 @@ pub(crate) struct Report {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) targets: Vec<TargetReport>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) harnesses: Vec<HarnessReport>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) pushes: Vec<TargetPush>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) declarations: Option<DeclarationsReport>,
@@ -61,6 +63,7 @@ impl Report {
             missing_executables: Vec::new(),
             undeclared_marketplaces: Vec::new(),
             targets: Vec::new(),
+            harnesses: Vec::new(),
             pushes: Vec::new(),
             declarations: None,
             summary,
@@ -75,6 +78,12 @@ pub(crate) struct TargetReport {
     pub(crate) branch: String,
     pub(crate) kind: Kind,
     pub(crate) primary: bool,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct HarnessReport {
+    pub(crate) name: &'static str,
+    pub(crate) synced: bool,
 }
 
 #[derive(Debug, Serialize)]

@@ -9,6 +9,8 @@ mod files;
 #[cfg(test)]
 mod gerrit;
 #[cfg(test)]
+mod harnesses;
+#[cfg(test)]
 mod init;
 #[cfg(test)]
 mod marketplaces;
