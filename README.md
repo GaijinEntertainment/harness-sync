@@ -84,6 +84,11 @@ that is not the primary gets this machine's setup as its new snapshot, without a
 `secrets`, `include`, and `exclude` of its own `cc-sync.toml`. So a target can hold a subset of the setup. Push stops
 at the first target that refuses, for example a primary with commits this machine has not pulled.
 
+A Gerrit project takes changes for review in place of direct pushes. Add it with `--gerrit`, which `init` also
+takes. Push then sends the snapshot as a change to `refs/for/<branch>`, with a `Change-Id` line, and reports the
+change link. cc-sync never merges the change. The branch of the target, and the base commit of a Gerrit primary, move
+after you merge it; until then status lists the pushed items as local changes, and each push opens a new change.
+
 ## Day to day
 
 `cc-sync status` lists the items that differ from the remote snapshot. `cc-sync pull` applies the changes of the other
@@ -198,9 +203,10 @@ A report looks like this:
 - `secrets_found` lists key paths when the scan blocks a push, `missing_executables` lists `{id, executable}` pairs
   after a pull, and `undeclared_marketplaces` lists `{name, declaration}` pairs from status and push for the
   marketplaces that do not sync. Each appears only when it holds entries.
-- `pushes` lists `{target, outcome, commit, items}` for each target that a push reached. The top-level `items`,
+- `pushes` lists `{target, outcome, commit, review, items}` for each target that a push reached; `review` holds
+  the pushed `commit` and the `change_url` for a Gerrit target. The top-level `items`,
   `base_commit`, and `remote_commit` belong to the primary target; the `items` of another target list what the push
-  replaced there. `targets` lists `{name, url, branch, primary}` for `target list`.
+  replaced there. `targets` lists `{name, url, branch, kind, primary}` for `target list`.
 - A file item shows its git blob id and executable bit in place of its content.
 
 Item ids name what `--take`, `pin`, and `unpin` act on:

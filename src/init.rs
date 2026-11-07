@@ -8,12 +8,10 @@ use crate::git::{self, BASE_REF, Git};
 use crate::paths::Paths;
 use crate::report::{Report, short_commit};
 
-pub(crate) fn run(paths: &Paths, name: &str, remote: &str, branch: &str) -> Result<Report> {
+pub(crate) fn run(paths: &Paths, name: &str, target: Target) -> Result<Report> {
     let config_file = paths.config_file();
-    let target = Target {
-        url: remote.to_owned(),
-        branch: branch.to_owned(),
-    };
+    let remote = target.url.clone();
+    let branch = target.branch.clone();
     let existing = Config::load(&config_file)?;
     if let Some(existing) = &existing {
         let primary = existing.primary()?;
@@ -37,10 +35,10 @@ pub(crate) fn run(paths: &Paths, name: &str, remote: &str, branch: &str) -> Resu
     if !repo_dir.exists() {
         git.init_bare()?;
     }
-    git.set_remote(&config.primary, remote)?;
+    git.set_remote(&config.primary, &remote)?;
     git.fetch(&config.primary)?;
     config.save(&config_file)?;
-    let remote_commit = git.resolve(&git::remote_ref(&config.primary, branch))?;
+    let remote_commit = git.resolve(&git::remote_ref(&config.primary, &branch))?;
     let summary = remote_commit.as_deref().map_or_else(
         || format!("connected to {remote}; branch {branch} is empty: run `cc-sync push` to create it"),
         |commit| {

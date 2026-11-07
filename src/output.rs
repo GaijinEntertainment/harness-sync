@@ -4,6 +4,7 @@ use std::io::{self, ErrorKind, IsTerminal, Write};
 use anyhow::Result;
 
 use crate::compare::ItemState;
+use crate::config::Kind;
 use crate::item::KeyPath;
 use crate::pull::Side;
 use crate::report::{ItemReport, Report};
@@ -105,11 +106,16 @@ fn human(report: &Report) -> String {
         }
     }
     for target in &report.targets {
+        let gerrit = if target.kind == Kind::Gerrit {
+            "  (gerrit)"
+        } else {
+            ""
+        };
         let primary = if target.primary { "  (primary)" } else { "" };
         // ignored: writing to a String cannot fail
         let _ = writeln!(
             text,
-            "  {}  {}  branch {}{primary}",
+            "  {}  {}  branch {}{gerrit}{primary}",
             target.name, target.url, target.branch
         );
     }

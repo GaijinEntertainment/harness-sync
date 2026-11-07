@@ -102,6 +102,7 @@ pub(crate) fn list(paths: &Paths) -> Result<Report> {
             name: name.clone(),
             url: target.url.clone(),
             branch: target.branch.clone(),
+            kind: target.kind,
             primary: *name == config.primary,
         })
         .collect();

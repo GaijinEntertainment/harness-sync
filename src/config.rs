@@ -21,6 +21,22 @@ pub(crate) struct Config {
 pub(crate) struct Target {
     pub(crate) url: String,
     pub(crate) branch: String,
+    #[serde(default)]
+    pub(crate) kind: Kind,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Kind {
+    #[default]
+    Git,
+    Gerrit,
+}
+
+impl Kind {
+    pub(crate) const fn from_gerrit_flag(gerrit: bool) -> Self {
+        if gerrit { Self::Gerrit } else { Self::Git }
+    }
 }
 
 pub(crate) const ALL_TARGETS: &str = "all";

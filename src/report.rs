@@ -2,6 +2,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
+use crate::config::Kind;
 use crate::item::KeyPath;
 use crate::secret;
 
@@ -69,6 +70,7 @@ pub(crate) struct TargetReport {
     pub(crate) name: String,
     pub(crate) url: String,
     pub(crate) branch: String,
+    pub(crate) kind: Kind,
     pub(crate) primary: bool,
 }
 
@@ -77,8 +79,16 @@ pub(crate) struct TargetPush {
     pub(crate) target: String,
     pub(crate) outcome: Outcome,
     pub(crate) commit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) review: Option<Review>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) items: Vec<ItemReport>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct Review {
+    pub(crate) commit: String,
+    pub(crate) change_url: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
