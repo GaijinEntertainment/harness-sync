@@ -1,3 +1,5 @@
+mod gerrit;
+
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
@@ -6,68 +8,155 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 
-pub(crate) const BASE_REF: &str = "refs/harness-sync/base";
+use crate::config::Target;
+use crate::paths::Paths;
+use crate::storage::{self, FileChange, Publish, SnapshotFile, Storage, StorageKind};
+
+const BASE_REF: &str = "refs/harness-sync/base";
 const PENDING_REF: &str = "refs/harness-sync/pending";
 
+pub(crate) static GIT: StorageKind = StorageKind {
+    name: storage::DEFAULT_KIND,
+    open: |paths, name, target| GitTarget::open(paths, name, target, false),
+};
+
+pub(crate) static GERRIT: StorageKind = StorageKind {
+    name: "gerrit",
+    open: |paths, name, target| GitTarget::open(paths, name, target, true),
+};
+
 #[derive(Debug)]
-pub(crate) struct Git {
+struct GitTarget {
+    git: Git,
+    name: String,
+    url: String,
+    branch: String,
+    gerrit: bool,
+}
+
+impl GitTarget {
+    fn open(paths: &Paths, name: &str, target: &Target, gerrit: bool) -> Box<dyn Storage> {
+        Box::new(Self {
+            git: Git {
+                git_dir: paths.repo_dir(),
+            },
+            name: name.to_owned(),
+            url: target.url.clone(),
+            branch: target.branch.clone(),
+            gerrit,
+        })
+    }
+}
+
+impl Storage for GitTarget {
+    fn connect(&self) -> Result<()> {
+        if !self.git.git_dir.exists() {
+            self.git.init_bare()?;
+        }
+        self.git.set_remote(&self.name, &self.url)
+    }
+
+    fn disconnect(&self) -> Result<()> {
+        self.git.run(&["remote", "remove", &self.name]).map(drop)
+    }
+
+    fn fetch(&self) -> Result<()> {
+        self.git
+            .run(&["fetch", "--quiet", "--prune", &self.name])
+            .map(drop)
+    }
+
+    fn head(&self) -> Result<Option<String>> {
+        self.git
+            .resolve(&format!("refs/remotes/{}/{}", self.name, self.branch))
+    }
+
+    fn read_files(&self, commit: &str, paths: &[&str]) -> Result<Vec<Option<Vec<u8>>>> {
+        let specs: Vec<String> = paths
+            .iter()
+            .map(|path| format!("{commit}:{path}"))
+            .collect();
+        self.git.read_objects(&specs)
+    }
+
+    fn list_files(&self, commit: &str) -> Result<Vec<SnapshotFile>> {
+        let output = self
+            .git
+            .run(&["ls-tree", "-r", "-z", "--full-tree", commit])?;
+        parse_tree(&output.stdout)
+    }
+
+    fn read_contents(&self, ids: &[String]) -> Result<Vec<Option<Vec<u8>>>> {
+        self.git.read_objects(ids)
+    }
+
+    fn content_ids(&self, files: &[PathBuf]) -> Result<Vec<String>> {
+        self.git.hash_files(files)
+    }
+
+    fn commit(
+        &self,
+        parent: Option<&str>,
+        changes: &[FileChange],
+        subject: &str,
+    ) -> Result<String> {
+        let message = if self.gerrit {
+            gerrit::message(&self.git, subject, parent)?
+        } else {
+            subject.to_owned()
+        };
+        self.git.commit(parent, changes, &message)
+    }
+
+    fn publish(&self, commit: &str) -> Result<Publish> {
+        let destination = if self.gerrit {
+            format!("refs/for/{}", self.branch)
+        } else {
+            format!("refs/heads/{}", self.branch)
+        };
+        let pushed = self.git.run(&[
+            "push",
+            "--quiet",
+            &self.name,
+            &format!("{commit}:{destination}"),
+        ]);
+        match pushed {
+            Ok(output) if self.gerrit => Ok(Publish::SentForReview {
+                change_url: gerrit::change_url(&String::from_utf8_lossy(&output.stderr)),
+            }),
+            Ok(_) => Ok(Publish::Published),
+            Err(err) if self.gerrit => Err(err),
+            Err(err) => {
+                let fetched = self.head()?;
+                self.fetch()?;
+                if self.head()? == fetched {
+                    return Err(err);
+                }
+                Ok(Publish::RemoteAhead)
+            }
+        }
+    }
+
+    fn base(&self) -> Result<Option<String>> {
+        self.git.resolve(BASE_REF)
+    }
+
+    fn set_base(&self, commit: &str) -> Result<()> {
+        self.git.run(&["update-ref", BASE_REF, commit]).map(drop)
+    }
+
+    fn clear_base(&self) -> Result<()> {
+        self.git.run(&["update-ref", "-d", BASE_REF]).map(drop)
+    }
+}
+
+#[derive(Debug)]
+struct Git {
     git_dir: PathBuf,
 }
 
-#[derive(Debug)]
-pub(crate) enum TreeChange {
-    Write {
-        path: String,
-        content: Vec<u8>,
-        executable: bool,
-    },
-    Delete {
-        path: String,
-    },
-}
-
-impl TreeChange {
-    fn write_to(&self, stream: &mut Vec<u8>) -> Result<()> {
-        let (Self::Write { path, .. } | Self::Delete { path }) = self;
-        ensure!(
-            !path.contains('\n') && !path.starts_with('"'),
-            "cannot store the path {path:?} in the remote snapshot"
-        );
-        match self {
-            Self::Write {
-                content,
-                executable,
-                ..
-            } => {
-                let mode = if *executable { "100755" } else { "100644" };
-                stream
-                    .extend(format!("M {mode} inline {path}\ndata {}\n", content.len()).as_bytes());
-                stream.extend(content);
-                stream.push(b'\n');
-            }
-            Self::Delete { .. } => stream.extend(format!("D {path}\n").as_bytes()),
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct TreeEntry {
-    pub(crate) path: String,
-    pub(crate) blob: String,
-    pub(crate) executable: bool,
-}
-
-pub(crate) fn remote_ref(target: &str, branch: &str) -> String {
-    format!("refs/remotes/{target}/{branch}")
-}
-
 impl Git {
-    pub(crate) const fn open(git_dir: PathBuf) -> Self {
-        Self { git_dir }
-    }
-
-    pub(crate) fn init_bare(&self) -> Result<()> {
+    fn init_bare(&self) -> Result<()> {
         let mut command = Command::new("git");
         command
             .args(["init", "--bare", "--quiet"])
@@ -75,7 +164,7 @@ impl Git {
         run(command, "init").map(drop)
     }
 
-    pub(crate) fn set_remote(&self, target: &str, url: &str) -> Result<()> {
+    fn set_remote(&self, target: &str, url: &str) -> Result<()> {
         self.run(&["config", &format!("remote.{target}.url"), url])?;
         self.run(&[
             "config",
@@ -85,15 +174,7 @@ impl Git {
         .map(drop)
     }
 
-    pub(crate) fn remove_remote(&self, target: &str) -> Result<()> {
-        self.run(&["remote", "remove", target]).map(drop)
-    }
-
-    pub(crate) fn fetch(&self, target: &str) -> Result<()> {
-        self.run(&["fetch", "--quiet", "--prune", target]).map(drop)
-    }
-
-    pub(crate) fn resolve(&self, refname: &str) -> Result<Option<String>> {
+    fn resolve(&self, refname: &str) -> Result<Option<String>> {
         let output = self
             .command(&[
                 "rev-parse",
@@ -111,19 +192,14 @@ impl Git {
         ))
     }
 
-    pub(crate) fn read_files(&self, specs: &[String]) -> Result<Vec<Option<Vec<u8>>>> {
+    fn read_objects(&self, specs: &[String]) -> Result<Vec<Option<Vec<u8>>>> {
         let mut input = specs.join("\n");
         input.push('\n');
         let output = self.run_with_input(&["cat-file", "--batch"], input.into_bytes())?;
         parse_batch(&output.stdout, specs.len())
     }
 
-    pub(crate) fn list_files(&self, commit: &str) -> Result<Vec<TreeEntry>> {
-        let output = self.run(&["ls-tree", "-r", "-z", "--full-tree", commit])?;
-        parse_tree(&output.stdout)
-    }
-
-    pub(crate) fn hash_files(&self, files: &[PathBuf]) -> Result<Vec<String>> {
+    fn hash_files(&self, files: &[PathBuf]) -> Result<Vec<String>> {
         if files.is_empty() {
             return Ok(Vec::new());
         }
@@ -150,10 +226,10 @@ impl Git {
         Ok(blobs)
     }
 
-    pub(crate) fn commit(
+    fn commit(
         &self,
         parent: Option<&str>,
-        changes: &[TreeChange],
+        changes: &[FileChange],
         message: &str,
     ) -> Result<String> {
         let mut stream = format!(
@@ -166,34 +242,16 @@ impl Git {
             stream.extend(format!("from {parent}\n").as_bytes());
         }
         for change in changes {
-            change.write_to(&mut stream)?;
+            write_change(change, &mut stream)?;
         }
         self.run_with_input(&["fast-import", "--quiet", "--force"], stream)?;
         self.resolve(PENDING_REF)?
             .context("git fast-import did not create the snapshot commit")
     }
 
-    pub(crate) fn push(&self, target: &str, commit: &str, destination: &str) -> Result<String> {
-        let output = self.run(&[
-            "push",
-            "--quiet",
-            target,
-            &format!("{commit}:{destination}"),
-        ])?;
-        Ok(String::from_utf8_lossy(&output.stderr).into_owned())
-    }
-
-    pub(crate) fn hash_text(&self, text: &str) -> Result<String> {
+    fn hash_text(&self, text: &str) -> Result<String> {
         let output = self.run_with_input(&["hash-object", "--stdin"], text.as_bytes().to_vec())?;
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
-    }
-
-    pub(crate) fn set_base(&self, commit: &str) -> Result<()> {
-        self.run(&["update-ref", BASE_REF, commit]).map(drop)
-    }
-
-    pub(crate) fn clear_base(&self) -> Result<()> {
-        self.run(&["update-ref", "-d", BASE_REF]).map(drop)
     }
 
     fn committer(&self) -> String {
@@ -257,6 +315,28 @@ impl Git {
     }
 }
 
+fn write_change(change: &FileChange, stream: &mut Vec<u8>) -> Result<()> {
+    let (FileChange::Write { path, .. } | FileChange::Delete { path }) = change;
+    ensure!(
+        !path.contains('\n') && !path.starts_with('"'),
+        "cannot store the path {path:?} in the remote snapshot"
+    );
+    match change {
+        FileChange::Write {
+            content,
+            executable,
+            ..
+        } => {
+            let mode = if *executable { "100755" } else { "100644" };
+            stream.extend(format!("M {mode} inline {path}\ndata {}\n", content.len()).as_bytes());
+            stream.extend(content);
+            stream.push(b'\n');
+        }
+        FileChange::Delete { .. } => stream.extend(format!("D {path}\n").as_bytes()),
+    }
+    Ok(())
+}
+
 fn parse_batch(mut stream: &[u8], count: usize) -> Result<Vec<Option<Vec<u8>>>> {
     let mut files = Vec::with_capacity(count);
     for _ in 0..count {
@@ -284,8 +364,8 @@ fn parse_batch(mut stream: &[u8], count: usize) -> Result<Vec<Option<Vec<u8>>>> 
     Ok(files)
 }
 
-fn parse_tree(stream: &[u8]) -> Result<Vec<TreeEntry>> {
-    let mut entries = Vec::new();
+fn parse_tree(stream: &[u8]) -> Result<Vec<SnapshotFile>> {
+    let mut files = Vec::new();
     for record in stream
         .split(|&byte| byte == 0)
         .filter(|record| !record.is_empty())
@@ -300,14 +380,14 @@ fn parse_tree(stream: &[u8]) -> Result<Vec<TreeEntry>> {
             bail!("unexpected git ls-tree record `{record}`");
         };
         if kind == "blob" {
-            entries.push(TreeEntry {
+            files.push(SnapshotFile {
                 path: path.to_owned(),
-                blob: blob.to_owned(),
+                content_id: blob.to_owned(),
                 executable: mode == "100755",
             });
         }
     }
-    Ok(entries)
+    Ok(files)
 }
 
 fn run(mut command: Command, subcommand: &str) -> Result<Output> {
@@ -331,19 +411,19 @@ mod tests {
     fn tree_records_yield_blobs_with_their_mode() {
         let stream = b"100644 blob aaa\t.claude/CLAUDE.md\x00100755 blob bbb\t.claude/hooks/x.sh\x00160000 commit ccc\t.claude/sub\x00";
 
-        let entries = parse_tree(stream).unwrap();
+        let files = parse_tree(stream).unwrap();
 
         assert_eq!(
-            entries,
+            files,
             [
-                TreeEntry {
+                SnapshotFile {
                     path: ".claude/CLAUDE.md".to_owned(),
-                    blob: "aaa".to_owned(),
+                    content_id: "aaa".to_owned(),
                     executable: false
                 },
-                TreeEntry {
+                SnapshotFile {
                     path: ".claude/hooks/x.sh".to_owned(),
-                    blob: "bbb".to_owned(),
+                    content_id: "bbb".to_owned(),
                     executable: true
                 },
             ]

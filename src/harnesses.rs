@@ -1,10 +1,10 @@
 use anyhow::Result;
 
 use crate::config::Config;
-use crate::git::{BASE_REF, Git};
 use crate::harness::{self, HARNESSES};
 use crate::paths::Paths;
 use crate::report::{HarnessReport, Report};
+use crate::storage;
 
 pub(crate) fn add(paths: &Paths, name: &str) -> Result<Report> {
     harness::by_name(name)?;
@@ -18,7 +18,10 @@ pub(crate) fn add(paths: &Paths, name: &str) -> Result<Report> {
     }
     config.harnesses.push(name.to_owned());
     config.harnesses.sort();
-    if Git::open(paths.repo_dir()).resolve(BASE_REF)?.is_some() {
+    if storage::open(paths, &config, &config.primary)?
+        .base()?
+        .is_some()
+    {
         config.harnesses_without_base.push(name.to_owned());
     }
     config.save(&config_file)?;

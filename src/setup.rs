@@ -6,11 +6,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 
 use crate::declarations::Declarations;
-use crate::git::{Git, TreeChange};
 use crate::harness::{KeyedFile, Selection, keyed_files};
 use crate::item::{Items, KeyPath, json_document, json_items};
 use crate::json_edit::{self, Edit};
 use crate::paths::Paths;
+use crate::storage::{FileChange, Storage};
 use crate::{atomic, files};
 
 #[derive(Debug)]
@@ -40,7 +40,7 @@ impl Backup {
 
 pub(crate) fn load_local(
     paths: &Paths,
-    git: &Git,
+    storage: &dyn Storage,
     declarations: &Declarations,
     selection: &Selection,
 ) -> Result<Items> {
@@ -58,33 +58,36 @@ pub(crate) fn load_local(
     }
     items.retain(|id, _| !declarations.excludes(id));
     let catalog = files::catalog(paths, &items, &declarations.include, selection)?;
-    items.extend(files::load_local(git, paths, &catalog)?);
+    items.extend(files::load_local(storage, paths, &catalog)?);
     items.retain(|id, _| !declarations.excludes(id));
     Ok(items)
 }
 
 pub(crate) fn load_snapshot(
-    git: &Git,
+    storage: &dyn Storage,
     commit: Option<&str>,
     declarations: &Declarations,
     selection: &Selection,
 ) -> Result<Items> {
-    let mut items = load_whole_snapshot(git, commit, &declarations.include)?;
+    let mut items = load_whole_snapshot(storage, commit, &declarations.include)?;
     items.retain(|id, _| selection.syncs(&id.file) && !declarations.excludes(id));
     Ok(items)
 }
 
-fn load_whole_snapshot(git: &Git, commit: Option<&str>, include: &[KeyPath]) -> Result<Items> {
+fn load_whole_snapshot(
+    storage: &dyn Storage,
+    commit: Option<&str>,
+    include: &[KeyPath],
+) -> Result<Items> {
     let Some(commit) = commit else {
         return Ok(Items::new());
     };
-    let specs: Vec<String> = keyed_files()
-        .map(|keyed| format!("{commit}:{}", keyed.path))
-        .collect();
-    let mut items = files::load_snapshot(git, commit, include)?;
-    for ((keyed, spec), content) in keyed_files().zip(&specs).zip(git.read_files(&specs)?) {
+    let paths: Vec<&str> = keyed_files().map(|keyed| keyed.path).collect();
+    let mut items = files::load_snapshot(storage, commit, include)?;
+    for (keyed, content) in keyed_files().zip(storage.read_files(commit, &paths)?) {
         if let Some(bytes) = content {
-            items.extend(parse(keyed, &bytes, Path::new(spec), include)?);
+            let origin = format!("{commit}:{}", keyed.path);
+            items.extend(parse(keyed, &bytes, Path::new(&origin), include)?);
         }
     }
     Ok(items)
@@ -97,7 +100,7 @@ fn parse(keyed: &KeyedFile, bytes: &[u8], origin: &Path, include: &[KeyPath]) ->
         .with_context(|| format!("cannot read the items of {}", origin.display()))
 }
 
-pub(crate) fn json_changes(items: &Items, remote: &Items) -> Result<Vec<TreeChange>> {
+pub(crate) fn json_changes(items: &Items, remote: &Items) -> Result<Vec<FileChange>> {
     let mut changes = Vec::new();
     for keyed in keyed_files() {
         let holds_items = |items: &Items| items.keys().any(|id| id.file == keyed.path);
@@ -107,13 +110,13 @@ pub(crate) fn json_changes(items: &Items, remote: &Items) -> Result<Vec<TreeChan
                     format!("cannot serialize {} of the remote snapshot", keyed.path)
                 })?;
             content.push(b'\n');
-            changes.push(TreeChange::Write {
+            changes.push(FileChange::Write {
                 path: keyed.path.to_owned(),
                 content,
                 executable: false,
             });
         } else if holds_items(remote) {
-            changes.push(TreeChange::Delete {
+            changes.push(FileChange::Delete {
                 path: keyed.path.to_owned(),
             });
         }
@@ -122,11 +125,11 @@ pub(crate) fn json_changes(items: &Items, remote: &Items) -> Result<Vec<TreeChan
 }
 
 pub(crate) fn excluded_removals(
-    git: &Git,
+    storage: &dyn Storage,
     commit: Option<&str>,
     declarations: &Declarations,
-) -> Result<Vec<TreeChange>> {
-    let whole = load_whole_snapshot(git, commit, &declarations.include)?;
+) -> Result<Vec<FileChange>> {
+    let whole = load_whole_snapshot(storage, commit, &declarations.include)?;
     let (excluded, kept): (Items, Items) = whole
         .clone()
         .into_iter()
@@ -140,7 +143,7 @@ pub(crate) fn excluded_removals(
         excluded
             .keys()
             .filter(|id| id.is_whole_file())
-            .map(|id| TreeChange::Delete {
+            .map(|id| FileChange::Delete {
                 path: id.file.clone(),
             }),
     );

@@ -130,7 +130,7 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
 }
 
 fn set_base(paths: &Paths, session: &Session, remote_commit: &str) -> Result<()> {
-    session.git.set_base(remote_commit)?;
+    session.storage.set_base(remote_commit)?;
     if session.config.harnesses_without_base.is_empty() {
         return Ok(());
     }
@@ -195,7 +195,7 @@ fn apply(
         write(paths, session, &writes)?;
         setup::load_local(
             paths,
-            &session.git,
+            session.storage.as_ref(),
             &session.declarations,
             &session.selection,
         )?
@@ -228,7 +228,7 @@ fn write(paths: &Paths, session: &Session, writes: &[(&ItemId, Option<Value>)]) 
         .map(|(id, value)| (*id, value.as_ref()))
         .collect();
     if !file_writes.is_empty() {
-        files::write_local(paths, &session.git, &backup, &file_writes)?;
+        files::write_local(paths, session.storage.as_ref(), &backup, &file_writes)?;
     }
     Ok(())
 }

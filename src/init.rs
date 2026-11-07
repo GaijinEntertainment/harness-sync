@@ -4,10 +4,10 @@ use std::fs;
 use anyhow::{Context, Result, ensure};
 
 use crate::config::{Config, Target};
-use crate::git::{self, BASE_REF, Git};
 use crate::harness::{self, HARNESSES};
 use crate::paths::Paths;
 use crate::report::{Report, short_commit};
+use crate::storage;
 
 pub(crate) fn run(
     paths: &Paths,
@@ -41,15 +41,11 @@ pub(crate) fn run(
     };
     fs::create_dir_all(&paths.state_dir)
         .with_context(|| format!("cannot create {}", paths.state_dir.display()))?;
-    let repo_dir = paths.repo_dir();
-    let git = Git::open(repo_dir.clone());
-    if !repo_dir.exists() {
-        git.init_bare()?;
-    }
-    git.set_remote(&config.primary, &remote)?;
-    git.fetch(&config.primary)?;
+    let storage = storage::open(paths, &config, &config.primary)?;
+    storage.connect()?;
+    storage.fetch()?;
     config.save(&config_file)?;
-    let remote_commit = git.resolve(&git::remote_ref(&config.primary, &branch))?;
+    let remote_commit = storage.head()?;
     let summary = remote_commit.as_deref().map_or_else(
         || format!("connected to {remote}; branch {branch} is empty: run `harness-sync push` to create it"),
         |commit| {
@@ -60,7 +56,7 @@ pub(crate) fn run(
         },
     );
     Ok(Report {
-        base_commit: git.resolve(BASE_REF)?,
+        base_commit: storage.base()?,
         remote_commit,
         ..Report::new(
             "init",

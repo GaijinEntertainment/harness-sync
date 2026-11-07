@@ -1,9 +1,9 @@
 use anyhow::{Result, ensure};
 
 use crate::config::{Config, Target};
-use crate::git::{self, Git};
 use crate::paths::Paths;
 use crate::report::{Report, TargetReport, short_commit};
+use crate::storage;
 
 pub(crate) fn add(paths: &Paths, name: &str, target: Target) -> Result<Report> {
     let config_file = paths.config_file();
@@ -20,13 +20,13 @@ pub(crate) fn add(paths: &Paths, name: &str, target: Target) -> Result<Report> {
             format!("the target `{name}` exists"),
         ));
     }
-    let git = Git::open(paths.repo_dir());
-    git.set_remote(name, &target.url)?;
-    if let Err(err) = git.fetch(name) {
-        git.remove_remote(name)?;
+    let storage = storage::open_target(paths, name, &target)?;
+    storage.connect()?;
+    if let Err(err) = storage.fetch() {
+        storage.disconnect()?;
         return Err(err);
     }
-    let head = git.resolve(&git::remote_ref(name, &target.branch))?;
+    let head = storage.head()?;
     let summary = head.as_deref().map_or_else(
         || {
             format!(
@@ -54,14 +54,14 @@ pub(crate) fn remove(paths: &Paths, name: &str) -> Result<Report> {
         config.primary != name,
         "`{name}` is the primary target; make another target primary first"
     );
-    if config.targets.remove(name).is_none() {
+    let Some(removed) = config.targets.remove(name) else {
         return Ok(Report::new(
             "target remove",
             format!("there is no target `{name}`"),
         ));
-    }
+    };
     config.save(&config_file)?;
-    Git::open(paths.repo_dir()).remove_remote(name)?;
+    storage::open_target(paths, name, &removed)?.disconnect()?;
     Ok(Report::new(
         "target remove",
         format!("removed the target `{name}`"),
@@ -81,7 +81,7 @@ pub(crate) fn set_primary(paths: &Paths, name: &str) -> Result<Report> {
             format!("`{name}` is the primary target"),
         ));
     }
-    Git::open(paths.repo_dir()).clear_base()?;
+    storage::open(paths, &config, &config.primary)?.clear_base()?;
     name.clone_into(&mut config.primary);
     config.harnesses_without_base.clear();
     config.save(&config_file)?;
@@ -103,7 +103,7 @@ pub(crate) fn list(paths: &Paths) -> Result<Report> {
             name: name.clone(),
             url: target.url.clone(),
             branch: target.branch.clone(),
-            kind: target.kind,
+            kind: target.kind.clone(),
             primary: *name == config.primary,
         })
         .collect();

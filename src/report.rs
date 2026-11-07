@@ -2,7 +2,6 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
-use crate::config::Kind;
 use crate::item::KeyPath;
 use crate::secret;
 
@@ -76,7 +75,7 @@ pub(crate) struct TargetReport {
     pub(crate) name: String,
     pub(crate) url: String,
     pub(crate) branch: String,
-    pub(crate) kind: Kind,
+    pub(crate) kind: String,
     pub(crate) primary: bool,
 }
 

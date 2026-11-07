@@ -7,7 +7,6 @@ mod declarations;
 mod declare;
 mod executables;
 mod files;
-mod gerrit;
 mod git;
 mod harness;
 mod harnesses;
@@ -27,6 +26,7 @@ mod session;
 mod set_secret;
 mod setup;
 mod status;
+mod storage;
 mod target;
 
 use std::process::ExitCode;
@@ -288,9 +288,10 @@ fn execute(cli: &Cli) -> Result<Report> {
 }
 
 fn target(url: &str, branch: &str, gerrit: bool) -> config::Target {
+    let kind = if gerrit { &git::GERRIT } else { &git::GIT };
     config::Target {
         url: url.to_owned(),
         branch: branch.to_owned(),
-        kind: config::Kind::from_gerrit_flag(gerrit),
+        kind: kind.name.to_owned(),
     }
 }
