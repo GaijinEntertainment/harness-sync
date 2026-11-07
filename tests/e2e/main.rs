@@ -1,4 +1,4 @@
-//! End-to-end tests: the `cc-sync` binary runs against simulated machines and a bare git repo on disk.
+//! End-to-end tests: the `harness-sync` binary runs against simulated machines and a bare git repo on disk.
 
 #[cfg(test)]
 mod claude_json;

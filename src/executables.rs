@@ -136,7 +136,7 @@ mod tests {
         let setup = settings_items(json!({
             "statusLine": {"type": "command", "command": "sh -c true"},
             "hooks": {"Stop": [{"hooks": [
-                {"type": "command", "command": "cc-sync-test-missing-tool --flag"},
+                {"type": "command", "command": "harness-sync-test-missing-tool --flag"},
                 {"type": "command", "command": "~/.claude/hooks/absent.sh"}
             ]}]}
         }))
@@ -149,7 +149,7 @@ mod tests {
             [
                 MissingExecutable {
                     id: "settings:/hooks/Stop/0/hooks/0/command".to_owned(),
-                    executable: "cc-sync-test-missing-tool".to_owned()
+                    executable: "harness-sync-test-missing-tool".to_owned()
                 },
                 MissingExecutable {
                     id: "settings:/hooks/Stop/0/hooks/1/command".to_owned(),

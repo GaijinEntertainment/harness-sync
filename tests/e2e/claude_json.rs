@@ -23,13 +23,13 @@ fn catalog_keys_of_claude_json_move_and_the_rest_stays_on_each_machine() {
     let remote = Remote::new();
     let first = Machine::new();
     first.write_file(".claude.json", FIRST);
-    assert_exit(&first.cc_sync(&["init", &remote.url()]), 0);
-    assert_exit(&first.cc_sync(&["push"]), 0);
+    assert_exit(&first.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
     let second = Machine::new();
     second.write_file(".claude.json", SECOND);
-    assert_exit(&second.cc_sync(&["init", &remote.url()]), 0);
+    assert_exit(&second.harness_sync(&["init", &remote.url()]), 0);
 
-    let output = second.cc_sync(&["pull", "--prefer", "remote"]);
+    let output = second.harness_sync(&["pull", "--prefer", "remote"]);
 
     assert_exit(&output, 0);
     let objects = remote.all_objects();
@@ -68,11 +68,11 @@ fn claude_config_dir_moves_both_claude_code_files() {
     machine.write_file(".claude/settings.json", r#"{"model": "ignored"}"#);
     machine.write_file(".claude.json", r#"{"theme": "ignored"}"#);
     assert_exit(
-        &machine.cc_sync_in_config_dir("alt", &["init", &remote.url()]),
+        &machine.harness_sync_in_config_dir("alt", &["init", &remote.url()]),
         0,
     );
 
-    let output = machine.cc_sync_in_config_dir("alt", &["push"]);
+    let output = machine.harness_sync_in_config_dir("alt", &["push"]);
 
     assert_exit(&output, 0);
     let settings: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();

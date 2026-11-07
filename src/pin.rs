@@ -11,8 +11,9 @@ pub(crate) fn run(paths: &Paths, id: &ItemId, pinned: bool) -> Result<Report> {
         "`{id}` is not an item id: pin a key of settings.json, or one entry of a key that holds entries, such as `settings:/env/NAME`"
     );
     let config_file = paths.config_file();
-    let mut config = Config::load(&config_file)?
-        .context("this machine is not connected to a remote; run `cc-sync init <remote>` first")?;
+    let mut config = Config::load(&config_file)?.context(
+        "this machine is not connected to a remote; run `harness-sync init <remote>` first",
+    )?;
     let text = id.to_string();
     let changed = if pinned {
         let added = !config.pins.contains(&text);

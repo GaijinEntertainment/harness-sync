@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-const HOME_TOKEN: &str = "<cc-sync home>";
+const HOME_TOKEN: &str = "<harness-sync home>";
 
 pub(crate) fn tokenize(value: &mut Value, home: &Path) {
     let text = home.to_string_lossy();
@@ -90,8 +90,8 @@ mod tests {
         assert_eq!(
             tokenized(value, "/Users/a"),
             json!({
-                "command": "node <cc-sync home>/.claude/statusline.js --short",
-                "list": ["<cc-sync home>", "<cc-sync home>/x:<cc-sync home>/y"]
+                "command": "node <harness-sync home>/.claude/statusline.js --short",
+                "list": ["<harness-sync home>", "<harness-sync home>/x:<harness-sync home>/y"]
             })
         );
     }
@@ -110,15 +110,15 @@ mod tests {
         assert_eq!(
             tokenized(value, "C:\\Users\\a"),
             json!([
-                "<cc-sync home>\\.claude\\x.ps1",
-                "<cc-sync home>/.claude/x.sh"
+                "<harness-sync home>\\.claude\\x.ps1",
+                "<harness-sync home>/.claude/x.sh"
             ])
         );
     }
 
     #[test]
     fn expand_puts_the_home_of_the_target_in_place_of_the_token() {
-        let mut value = json!({"command": "bash <cc-sync home>/.claude/x.sh"});
+        let mut value = json!({"command": "bash <harness-sync home>/.claude/x.sh"});
 
         expand(&mut value, Path::new("/home/b"));
 

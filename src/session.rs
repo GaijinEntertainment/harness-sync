@@ -42,7 +42,7 @@ impl Session {
             .get(&target)
             .map(|found| (found.branch.clone(), found.kind))
             .with_context(|| {
-                format!("there is no target `{target}`; add it with `cc-sync target add`")
+                format!("there is no target `{target}`; add it with `harness-sync target add`")
             })?;
         let git = Git::open(paths.repo_dir());
         git.fetch(&target)?;

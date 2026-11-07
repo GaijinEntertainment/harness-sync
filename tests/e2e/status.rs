@@ -6,11 +6,11 @@ use crate::support::{Machine, Remote, assert_exit, text};
 fn status_before_init_asks_for_init() {
     let machine = Machine::new();
 
-    let output = machine.cc_sync(&["status"]);
+    let output = machine.harness_sync(&["status"]);
 
     assert_exit(&output, 1);
     assert!(
-        text(&output.stderr).contains("cc-sync init"),
+        text(&output.stderr).contains("harness-sync init"),
         "stderr: {}",
         text(&output.stderr)
     );
@@ -21,9 +21,9 @@ fn status_against_an_empty_remote_lists_every_local_item_as_a_local_change() {
     let remote = Remote::new();
     let machine = Machine::new();
     machine.write_settings(&json!({"effortLevel": "high", "env": {"A": "1"}}));
-    assert_exit(&machine.cc_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
 
-    let (report, output) = machine.cc_sync_json(&["status"]);
+    let (report, output) = machine.harness_sync_json(&["status"]);
 
     assert_exit(&output, 0);
     assert_eq!(report["command"], "status");
@@ -40,9 +40,9 @@ fn status_against_an_empty_remote_lists_every_local_item_as_a_local_change() {
 fn status_without_a_settings_file_matches_an_empty_remote() {
     let remote = Remote::new();
     let machine = Machine::new();
-    assert_exit(&machine.cc_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
 
-    let output = machine.cc_sync(&["status"]);
+    let output = machine.harness_sync(&["status"]);
 
     assert_exit(&output, 0);
     assert!(
@@ -56,11 +56,11 @@ fn status_without_a_settings_file_matches_an_empty_remote() {
 fn status_reports_a_settings_file_that_is_not_json() {
     let remote = Remote::new();
     let machine = Machine::new();
-    assert_exit(&machine.cc_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
     machine.write_settings(&json!({}));
     std::fs::write(machine.settings_file(), "{ not json").unwrap();
 
-    let output = machine.cc_sync(&["status"]);
+    let output = machine.harness_sync(&["status"]);
 
     assert_exit(&output, 1);
     assert!(

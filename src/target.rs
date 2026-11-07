@@ -73,7 +73,7 @@ pub(crate) fn set_primary(paths: &Paths, name: &str) -> Result<Report> {
     let mut config = Config::load_connected(&config_file)?;
     ensure!(
         config.targets.contains_key(name),
-        "there is no target `{name}`; add it with `cc-sync target add`"
+        "there is no target `{name}`; add it with `harness-sync target add`"
     );
     if config.primary == name {
         return Ok(Report::new(
@@ -87,7 +87,7 @@ pub(crate) fn set_primary(paths: &Paths, name: &str) -> Result<Report> {
     Ok(Report::new(
         "target primary",
         format!(
-            "`{name}` is the primary target; this machine has no base commit for it, so run `cc-sync pull` and \
+            "`{name}` is the primary target; this machine has no base commit for it, so run `harness-sync pull` and \
              settle each item that differs with --prefer or --take"
         ),
     ))

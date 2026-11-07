@@ -87,7 +87,7 @@ impl Machine {
 
     pub(crate) fn backup_files(&self) -> Vec<String> {
         let mut found = Vec::new();
-        let mut dirs = vec![self.home().join(".cc-sync/backups")];
+        let mut dirs = vec![self.home().join(".harness-sync/backups")];
         while let Some(dir) = dirs.pop() {
             let Ok(entries) = fs::read_dir(&dir) else {
                 continue;
@@ -106,7 +106,7 @@ impl Machine {
     }
 
     pub(crate) fn backups(&self) -> Vec<String> {
-        let Ok(entries) = fs::read_dir(self.home().join(".cc-sync/backups")) else {
+        let Ok(entries) = fs::read_dir(self.home().join(".harness-sync/backups")) else {
             return Vec::new();
         };
         entries
@@ -114,50 +114,62 @@ impl Machine {
             .collect()
     }
 
-    pub(crate) fn cc_sync(&self, args: &[&str]) -> Output {
-        isolated(Command::new(env!("CARGO_BIN_EXE_cc-sync")), self.home())
-            .args(args)
-            .output()
-            .expect("run cc-sync")
+    pub(crate) fn harness_sync(&self, args: &[&str]) -> Output {
+        isolated(
+            Command::new(env!("CARGO_BIN_EXE_harness-sync")),
+            self.home(),
+        )
+        .args(args)
+        .output()
+        .expect("run harness-sync")
     }
 
-    pub(crate) fn cc_sync_with_path(&self, path: &std::ffi::OsStr, args: &[&str]) -> Output {
-        isolated(Command::new(env!("CARGO_BIN_EXE_cc-sync")), self.home())
-            .env("PATH", path)
-            .args(args)
-            .output()
-            .expect("run cc-sync")
+    pub(crate) fn harness_sync_with_path(&self, path: &std::ffi::OsStr, args: &[&str]) -> Output {
+        isolated(
+            Command::new(env!("CARGO_BIN_EXE_harness-sync")),
+            self.home(),
+        )
+        .env("PATH", path)
+        .args(args)
+        .output()
+        .expect("run harness-sync")
     }
 
-    pub(crate) fn cc_sync_in_config_dir(&self, config_dir: &str, args: &[&str]) -> Output {
-        isolated(Command::new(env!("CARGO_BIN_EXE_cc-sync")), self.home())
-            .env("CLAUDE_CONFIG_DIR", self.home().join(config_dir))
-            .args(args)
-            .output()
-            .expect("run cc-sync")
+    pub(crate) fn harness_sync_in_config_dir(&self, config_dir: &str, args: &[&str]) -> Output {
+        isolated(
+            Command::new(env!("CARGO_BIN_EXE_harness-sync")),
+            self.home(),
+        )
+        .env("CLAUDE_CONFIG_DIR", self.home().join(config_dir))
+        .args(args)
+        .output()
+        .expect("run harness-sync")
     }
 
-    pub(crate) fn cc_sync_with_input(&self, args: &[&str], input: &str) -> Output {
-        let mut child = isolated(Command::new(env!("CARGO_BIN_EXE_cc-sync")), self.home())
-            .args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("start cc-sync");
+    pub(crate) fn harness_sync_with_input(&self, args: &[&str], input: &str) -> Output {
+        let mut child = isolated(
+            Command::new(env!("CARGO_BIN_EXE_harness-sync")),
+            self.home(),
+        )
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("start harness-sync");
         child
             .stdin
             .take()
             .expect("stdin is piped")
             .write_all(input.as_bytes())
-            .expect("write the input of cc-sync");
-        child.wait_with_output().expect("run cc-sync")
+            .expect("write the input of harness-sync");
+        child.wait_with_output().expect("run harness-sync")
     }
 
-    pub(crate) fn cc_sync_json(&self, args: &[&str]) -> (Value, Output) {
+    pub(crate) fn harness_sync_json(&self, args: &[&str]) -> (Value, Output) {
         let mut all = args.to_vec();
         all.push("--json");
-        let output = self.cc_sync(&all);
+        let output = self.harness_sync(&all);
         let report = serde_json::from_slice(&output.stdout).unwrap_or_else(|err| {
             panic!(
                 "stdout is not JSON ({err}): {}\nstderr: {}",

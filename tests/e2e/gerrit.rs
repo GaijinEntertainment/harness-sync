@@ -15,7 +15,7 @@ fn gerrit_remote() -> Remote {
     let hook = remote.path().join("hooks/post-receive");
     fs::write(
         &hook,
-        format!("#!/bin/sh\necho 'New Changes:'\necho '  {CHANGE_URL} cc-sync push [NEW]'\n"),
+        format!("#!/bin/sh\necho 'New Changes:'\necho '  {CHANGE_URL} harness-sync push [NEW]'\n"),
     )
     .unwrap();
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
@@ -42,15 +42,15 @@ fn a_gerrit_target_gets_a_change_for_review_and_its_branch_stays() {
     let review = gerrit_remote();
     let machine = Machine::new();
     machine.write_settings(&json!({"model": "opus"}));
-    assert_exit(&machine.cc_sync(&["init", &primary.url()]), 0);
-    assert_exit(&machine.cc_sync(&["push"]), 0);
+    assert_exit(&machine.harness_sync(&["init", &primary.url()]), 0);
+    assert_exit(&machine.harness_sync(&["push"]), 0);
     assert_exit(
-        &machine.cc_sync(&["target", "add", "review", &review.url(), "--gerrit"]),
+        &machine.harness_sync(&["target", "add", "review", &review.url(), "--gerrit"]),
         0,
     );
     let branch_head = review.head("main");
 
-    let (report, output) = machine.cc_sync_json(&["push", "--to", "review"]);
+    let (report, output) = machine.harness_sync_json(&["push", "--to", "review"]);
 
     assert_exit(&output, 0);
     assert_eq!(review.head("main"), branch_head);
@@ -67,22 +67,25 @@ fn a_gerrit_target_gets_a_change_for_review_and_its_branch_stays() {
 fn a_gerrit_primary_keeps_the_base_commit_until_the_change_merges() {
     let review = gerrit_remote();
     let machine = Machine::new();
-    assert_exit(&machine.cc_sync(&["init", &review.url(), "--gerrit"]), 0);
-    assert_exit(&machine.cc_sync(&["pull"]), 0);
+    assert_exit(
+        &machine.harness_sync(&["init", &review.url(), "--gerrit"]),
+        0,
+    );
+    assert_exit(&machine.harness_sync(&["pull"]), 0);
     let base = review.head("main");
     machine.write_settings(&json!({"model": "opus"}));
 
-    let sent = machine.cc_sync(&["push"]);
+    let sent = machine.harness_sync(&["push"]);
 
     assert_exit(&sent, 0);
-    let (pending, _) = machine.cc_sync_json(&["status"]);
+    let (pending, _) = machine.harness_sync_json(&["status"]);
     assert_eq!(pending["base_commit"].as_str(), base.as_deref());
     assert_eq!(pending["items"][0]["state"], "local_change");
 
     review.git(&["update-ref", "refs/heads/main", &change_ref(&review)]);
-    assert_exit(&machine.cc_sync(&["pull"]), 0);
+    assert_exit(&machine.harness_sync(&["pull"]), 0);
 
-    let (merged, _) = machine.cc_sync_json(&["status"]);
+    let (merged, _) = machine.harness_sync_json(&["status"]);
     assert_eq!(
         merged["base_commit"].as_str(),
         review.head("main").as_deref()
@@ -94,11 +97,14 @@ fn a_gerrit_primary_keeps_the_base_commit_until_the_change_merges() {
 fn a_declarations_change_on_a_gerrit_target_goes_for_review() {
     let review = gerrit_remote();
     let machine = Machine::new();
-    assert_exit(&machine.cc_sync(&["init", &review.url(), "--gerrit"]), 0);
+    assert_exit(
+        &machine.harness_sync(&["init", &review.url(), "--gerrit"]),
+        0,
+    );
     let branch_head = review.head("main");
 
     let (report, output) =
-        machine.cc_sync_json(&["declarations", "add", "exclude", "settings:/model"]);
+        machine.harness_sync_json(&["declarations", "add", "exclude", "settings:/model"]);
 
     assert_exit(&output, 0);
     assert_eq!(review.head("main"), branch_head);
@@ -106,7 +112,7 @@ fn a_declarations_change_on_a_gerrit_target_goes_for_review() {
     assert!(has_change_id(&review, &change));
     assert!(
         review
-            .show(&format!("{change}:cc-sync.toml"))
+            .show(&format!("{change}:harness-sync.toml"))
             .contains("settings:/model")
     );
     assert_eq!(report["pushes"][0]["review"]["change_url"], CHANGE_URL);

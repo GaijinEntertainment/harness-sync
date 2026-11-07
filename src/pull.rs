@@ -113,7 +113,7 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
         .count();
     let summary = with_missing_secrets(
         format!(
-            "applied {} remote changes; {kept_local} local changes remain for `cc-sync push`",
+            "applied {} remote changes; {kept_local} local changes remain for `harness-sync push`",
             from_remote.len()
         ),
         missing.len(),
