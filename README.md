@@ -19,7 +19,8 @@ The design and the decisions behind it are in [`design-docs/`](design-docs/).
   script, and a file that a synced Markdown file imports with `@` or links with a relative link.
 - The plugin setup, as the settings entries above: `enabledPlugins`, `extraKnownMarketplaces`, and `pluginConfigs`.
   cc-sync runs no Claude Code command. After its next session starts, Claude Code clones each declared marketplace
-  that it lacks and downloads the enabled plugins. A marketplace that settings do not declare does not sync.
+  that it lacks and downloads the enabled plugins. A marketplace that settings do not declare does not sync: status
+  and push warn about it and show the entry to add to `extraKnownMarketplaces`.
 
 Everything else stays on the machine: the rest of `~/.claude.json` (counters, caches, account data, the `projects`
 records), credentials, history, sessions, auto-memory, `skills/synced/`, the plugin install records, and the plugin
@@ -172,8 +173,9 @@ A report looks like this:
 - `outcome` is `ok`, `conflicts`, `remote_ahead`, or `secrets_found`.
 - `state` is `local_change`, `remote_change`, `conflict`, `pinned`, or `secret_missing`. `null` means the side does not
   hold the item.
-- `secrets_found` lists key paths when the scan blocks a push, and `missing_executables` lists `{id, executable}` pairs
-  after a pull. Both appear only when they hold entries.
+- `secrets_found` lists key paths when the scan blocks a push, `missing_executables` lists `{id, executable}` pairs
+  after a pull, and `undeclared_marketplaces` lists `{name, declaration}` pairs from status and push for the
+  marketplaces that do not sync. Each appears only when it holds entries.
 - A file item shows its git blob id and executable bit in place of its content.
 
 Item ids name what `--take`, `pin`, and `unpin` act on:

@@ -9,7 +9,8 @@ use crate::declarations::Declarations;
 use crate::git::{self, BASE_REF, Git};
 use crate::item::{ItemId, Items, KeyPath};
 use crate::paths::Paths;
-use crate::{files, home, secret, setup};
+use crate::report::UndeclaredMarketplace;
+use crate::{files, home, marketplaces, secret, setup};
 
 #[derive(Debug)]
 pub(crate) struct Session {
@@ -20,6 +21,7 @@ pub(crate) struct Session {
     pub(crate) pins: BTreeSet<ItemId>,
     pub(crate) declarations: Declarations,
     pub(crate) local_setup: Items,
+    pub(crate) undeclared_marketplaces: Vec<UndeclaredMarketplace>,
     pub(crate) missing_secrets: BTreeSet<KeyPath>,
     pub(crate) three_way: ThreeWay,
 }
@@ -36,6 +38,7 @@ impl Session {
         let pins = config.pinned_items()?;
         let declarations = Declarations::load(&git, remote_commit.as_deref())?;
         let local_setup = setup::load_local(paths, &git, &declarations)?;
+        let undeclared_marketplaces = marketplaces::undeclared(paths, &local_setup, &declarations)?;
         let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
         let mut local = secret::local_view(&local_setup, &missing_secrets, &declarations.secrets);
         for value in local.values_mut() {
@@ -59,6 +62,7 @@ impl Session {
             pins,
             declarations,
             local_setup,
+            undeclared_marketplaces,
             missing_secrets,
             three_way,
         })
