@@ -43,6 +43,7 @@ pub(crate) fn run(paths: &Paths, id: &ItemId, pinned: bool) -> Result<Report> {
         items: Vec::new(),
         secrets_found: Vec::new(),
         missing_executables: Vec::new(),
+        undeclared_marketplaces: Vec::new(),
         summary,
     })
 }

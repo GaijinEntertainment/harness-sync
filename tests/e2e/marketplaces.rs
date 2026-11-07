@@ -93,3 +93,42 @@ fn a_declared_marketplace_reaches_the_other_machine_as_settings_alone() {
     let objects = remote.all_objects();
     assert!(!objects.contains("installLocation") && !objects.contains("team/legacy"));
 }
+
+#[test]
+fn status_and_push_warn_about_a_marketplace_that_settings_do_not_declare() {
+    let remote = Remote::new();
+    remote.commit_file(
+        "main",
+        "cc-sync.toml",
+        "exclude = [\"settings:/extraKnownMarketplaces/hidden\"]\n",
+    );
+    let first = Machine::new();
+    first.write_settings(&json!({"extraKnownMarketplaces": {"acme": {"source": {"source": "github", "repo": "acme/plugins"}}}}));
+    first.write_file(
+        ".claude/plugins/known_marketplaces.json",
+        &KNOWN.replacen(
+            "{\n",
+            "{\n  \"hidden\": {\"source\": {\"source\": \"github\", \"repo\": \"team/hidden\"}},\n",
+            1,
+        ),
+    );
+    assert_exit(&first.cc_sync(&["init", &remote.url()]), 0);
+    assert_exit(&first.cc_sync(&["pull"]), 0);
+
+    let (status, _) = first.cc_sync_json(&["status"]);
+    let pushed = first.cc_sync(&["push"]);
+
+    assert_eq!(
+        status["undeclared_marketplaces"],
+        json!([{"name": "legacy", "declaration": {"source": {"source": "github", "repo": "team/legacy"}}}])
+    );
+    assert_exit(&pushed, 0);
+    let warnings = String::from_utf8_lossy(&pushed.stderr);
+    assert!(
+        warnings.contains("warning: the marketplace `legacy` does not sync")
+            && warnings
+                .contains(r#"add "legacy": {"source":{"source":"github","repo":"team/legacy"}}"#)
+            && !warnings.contains("hidden"),
+        "stderr: {warnings}"
+    );
+}

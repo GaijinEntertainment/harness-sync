@@ -72,6 +72,7 @@ fn report(session: &Session, differences: &[Difference<'_>], summary: String) ->
         items: differences.iter().map(ItemReport::from).collect(),
         secrets_found: Vec::new(),
         missing_executables: Vec::new(),
+        undeclared_marketplaces: session.undeclared_marketplaces.clone(),
         summary,
     }
 }

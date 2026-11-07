@@ -52,6 +52,7 @@ pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
         items: Vec::new(),
         secrets_found: Vec::new(),
         missing_executables: Vec::new(),
+        undeclared_marketplaces: Vec::new(),
         summary,
     })
 }

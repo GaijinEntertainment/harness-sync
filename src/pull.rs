@@ -237,6 +237,7 @@ fn report(
         items: differences.iter().map(ItemReport::from).collect(),
         secrets_found: Vec::new(),
         missing_executables: Vec::new(),
+        undeclared_marketplaces: Vec::new(),
         summary,
     }
 }

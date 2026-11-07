@@ -49,6 +49,7 @@ pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report>
         items: Vec::new(),
         secrets_found: Vec::new(),
         missing_executables: Vec::new(),
+        undeclared_marketplaces: Vec::new(),
         summary: format!(
             "set the secret {key} in {}",
             paths.json_file(file).display()
