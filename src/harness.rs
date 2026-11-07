@@ -138,7 +138,11 @@ impl Selection {
     }
 
     pub(crate) fn syncs(&self, file: &str) -> bool {
-        owner(file).is_none_or(|owner| {
+        owner(file).is_none() || self.owns(file)
+    }
+
+    pub(crate) fn owns(&self, file: &str) -> bool {
+        owner(file).is_some_and(|owner| {
             self.harnesses
                 .iter()
                 .any(|harness| harness.name == owner.name)

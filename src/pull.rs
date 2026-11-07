@@ -5,6 +5,7 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
+use crate::config::Config;
 use crate::harness::keyed_files;
 use crate::item::{ItemId, Items, KeyPath};
 use crate::json_edit::Edit;
@@ -104,7 +105,7 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
         .filter(|d| takes_remote(d, choices))
         .collect();
     let (setup_now, missing) = apply(paths, &session, &from_remote, prompts)?;
-    session.git.set_base(&remote_commit)?;
+    set_base(paths, &session, &remote_commit)?;
     let kept_local = differences
         .iter()
         .filter(|d| {
@@ -126,6 +127,17 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
     pulled.missing_executables = executables::missing(&setup_now, &paths.home);
     pulled.base_commit = Some(remote_commit);
     Ok(pulled)
+}
+
+fn set_base(paths: &Paths, session: &Session, remote_commit: &str) -> Result<()> {
+    session.git.set_base(remote_commit)?;
+    if session.config.harnesses_without_base.is_empty() {
+        return Ok(());
+    }
+    let config_file = paths.config_file();
+    let mut config = Config::load_connected(&config_file)?;
+    config.harnesses_without_base.clear();
+    config.save(&config_file)
 }
 
 fn ask_sides(differences: &[Difference<'_>], choices: &Choices<'_>) -> Result<Vec<Take>> {

@@ -53,6 +53,12 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
     if session.remote_commit != session.base_commit {
         return Ok((remote_ahead(session), None));
     }
+    let added = &session.config.harnesses_without_base;
+    ensure!(
+        !session.is_primary() || added.is_empty(),
+        "this machine started to sync {} after its last pull: run `harness-sync pull` first",
+        added.join(", ")
+    );
     let differences = session.differences();
     let pushed_items = differences
         .iter()

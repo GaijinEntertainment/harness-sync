@@ -83,6 +83,7 @@ pub(crate) fn set_primary(paths: &Paths, name: &str) -> Result<Report> {
     }
     Git::open(paths.repo_dir()).clear_base()?;
     name.clone_into(&mut config.primary);
+    config.harnesses_without_base.clear();
     config.save(&config_file)?;
     Ok(Report::new(
         "target primary",
