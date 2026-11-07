@@ -161,12 +161,51 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "jsonc-parser",
+ "harness-sync-claude-code",
+ "harness-sync-core",
+ "harness-sync-git",
+ "harness-sync-pi",
  "rpassword",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "harness-sync-claude-code"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "harness-sync-core",
+ "serde_json",
+]
+
+[[package]]
+name = "harness-sync-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "jsonc-parser",
  "serde",
  "serde_json",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "harness-sync-git"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "harness-sync-core",
+]
+
+[[package]]
+name = "harness-sync-pi"
+version = "0.1.0"
+dependencies = [
+ "harness-sync-core",
+ "serde_json",
 ]
 
 [[package]]
