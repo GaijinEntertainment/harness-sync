@@ -24,8 +24,8 @@ The design and the decisions behind it are in [`design-docs/`](design-docs/).
 
 Everything else stays on the machine: the rest of `~/.claude.json` (counters, caches, account data, the `projects`
 records), credentials, history, sessions, auto-memory, `skills/synced/`, the removed skills in `skills/.trash/`, the
-plugin install records, and the plugin cache. When `CLAUDE_CONFIG_DIR` is set, harness-sync reads and writes the Claude
-Code files in that directory, as Claude Code does.
+plugin install records, the plugin cache, and every `node_modules` directory. When `CLAUDE_CONFIG_DIR` is set,
+harness-sync reads and writes the Claude Code files in that directory, as Claude Code does.
 
 ## Install
 

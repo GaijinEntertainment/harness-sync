@@ -14,7 +14,7 @@ use crate::paths::Paths;
 use crate::setup::Backup;
 use crate::{references, secret};
 
-const SKIPPED_NAMES: [&str; 1] = [".DS_Store"];
+const SKIPPED_NAMES: [&str; 2] = [".DS_Store", "node_modules"];
 
 pub(crate) fn catalog(
     paths: &Paths,
