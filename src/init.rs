@@ -8,9 +8,7 @@ use crate::git::{self, BASE_REF, Git};
 use crate::paths::Paths;
 use crate::report::{Report, short_commit};
 
-const FIRST_TARGET: &str = "origin";
-
-pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
+pub(crate) fn run(paths: &Paths, name: &str, remote: &str, branch: &str) -> Result<Report> {
     let config_file = paths.config_file();
     let target = Target {
         url: remote.to_owned(),
@@ -20,7 +18,7 @@ pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
     if let Some(existing) = &existing {
         let primary = existing.primary()?;
         ensure!(
-            *primary == target,
+            existing.primary == name && *primary == target,
             "this machine is already connected to {} (branch {}); remove {} to connect it to another remote",
             primary.url,
             primary.branch,
@@ -28,9 +26,9 @@ pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
         );
     }
     let config = existing.unwrap_or_else(|| Config {
-        primary: FIRST_TARGET.to_owned(),
+        primary: name.to_owned(),
         pins: Vec::new(),
-        targets: BTreeMap::from([(FIRST_TARGET.to_owned(), target)]),
+        targets: BTreeMap::from([(name.to_owned(), target)]),
     });
     fs::create_dir_all(&paths.state_dir)
         .with_context(|| format!("cannot create {}", paths.state_dir.display()))?;

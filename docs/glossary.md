@@ -74,8 +74,9 @@ which needs no reference).
 
 ### Remote snapshot
 
-The user-level setup as stored at the head of the repo's branch on the git remote. Secret placeholders stand for
-secrets, and a home-path token stands for the home directory.
+The user-level setup as stored at the head of a target's branch. Status, pull, and the base commit use the remote
+snapshot of the primary target. Secret placeholders stand for secrets, and a home-path token stands for the home
+directory.
 
 **Avoid:** backup (implies a one-way restore, but every
 machine pushes); master copy (no machine and no copy is authoritative); remote (the git remote, which holds the snapshot
@@ -83,20 +84,38 @@ but is not the snapshot).
 
 ### Base commit
 
-The remote snapshot commit that this machine last reconciled its setup with. A pull can keep local changes, so the setup
-can differ from it. A successful pull and a successful push both set it. It is the common ancestor in the three-way
-comparison of each supported item.
+The remote snapshot commit of the primary target that this machine last reconciled its setup with. A pull can keep
+local changes, so the setup can differ from it. A successful pull and a successful push to the primary target both set
+it, and making another target primary drops it. It is the common ancestor in the three-way comparison of each supported
+item.
 
 **Avoid:** last pulled commit (a push also
 moves it); last sync (sync names the whole function, not one event).
 
 ### Sync configuration
 
-The machine-local configuration in `~/.cc-sync/`: the remote and this machine's pins. Push never sends it.
+The machine-local configuration in `~/.cc-sync/`: the targets, the primary target, and this machine's pins. Push never
+sends it.
 
 **Avoid:**
 config (collides with Claude Code's configuration); catalog (shared through the repo with every machine); profile (other
 sync tools use it for shared layers that cc-sync does not have).
+
+### Target
+
+A named git repo and branch in the sync configuration that push can send the snapshot to. Each machine names its own
+targets, and one of them is the primary target. A target is always a repo, never the machine that a pull writes to.
+
+**Avoid:** remote (the git remote is only the URL of a target; a target also names a branch); mirror (implies a copy
+of the primary, but a target's own `cc-sync.toml` can make its snapshot a subset).
+
+### Primary target
+
+The target that status and pull read, that the base commit belongs to, and that push sends to by default. Each machine
+picks its own primary target.
+
+**Avoid:** origin (the default name of the first target, which a later switch leaves as a plain target); main
+(collides with the branch name).
 
 ### Pin
 

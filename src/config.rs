@@ -3,7 +3,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::atomic;
@@ -23,7 +23,29 @@ pub(crate) struct Target {
     pub(crate) branch: String,
 }
 
+pub(crate) const ALL_TARGETS: &str = "all";
+
+pub(crate) fn parse_target_name(text: &str) -> Result<String> {
+    ensure!(
+        !text.is_empty()
+            && text
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
+        "`{text}` is not a target name; use letters, digits, `-`, and `_`"
+    );
+    ensure!(
+        text != ALL_TARGETS,
+        "`{ALL_TARGETS}` names every target and cannot name one"
+    );
+    Ok(text.to_owned())
+}
+
 impl Config {
+    pub(crate) fn load_connected(path: &Path) -> Result<Self> {
+        Self::load(path)?
+            .context("this machine is not connected to a remote; run `cc-sync init <remote>` first")
+    }
+
     pub(crate) fn load(path: &Path) -> Result<Option<Self>> {
         let text = match fs::read_to_string(path) {
             Ok(text) => text,

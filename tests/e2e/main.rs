@@ -18,3 +18,5 @@ mod secret;
 mod status;
 #[cfg(test)]
 mod support;
+#[cfg(test)]
+mod targets;
