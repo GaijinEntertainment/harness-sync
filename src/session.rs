@@ -32,9 +32,10 @@ impl Session {
             "this machine is not connected to a remote; run `cc-sync init <remote>` first",
         )?;
         let git = Git::open(paths.repo_dir());
-        git.fetch()?;
+        let primary = config.primary()?;
+        git.fetch(&config.primary)?;
         let base_commit = git.resolve(BASE_REF)?;
-        let remote_commit = git.resolve(&git::remote_ref(&config.branch))?;
+        let remote_commit = git.resolve(&git::remote_ref(&config.primary, &primary.branch))?;
         let pins = config.pinned_items()?;
         let declarations = Declarations::load(&git, remote_commit.as_deref())?;
         let local_setup = setup::load_local(paths, &git, &declarations)?;

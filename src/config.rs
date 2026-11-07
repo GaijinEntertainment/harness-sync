@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
@@ -11,10 +11,16 @@ use crate::item::ItemId;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Config {
-    pub(crate) remote: String,
-    pub(crate) branch: String,
+    pub(crate) primary: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) pins: Vec<String>,
+    pub(crate) targets: BTreeMap<String, Target>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct Target {
+    pub(crate) url: String,
+    pub(crate) branch: String,
 }
 
 impl Config {
@@ -27,6 +33,15 @@ impl Config {
         toml::from_str(&text)
             .map(Some)
             .with_context(|| format!("cannot parse {}", path.display()))
+    }
+
+    pub(crate) fn primary(&self) -> Result<&Target> {
+        self.targets.get(&self.primary).with_context(|| {
+            format!(
+                "the primary target `{}` is not among the targets of the sync configuration",
+                self.primary
+            )
+        })
     }
 
     pub(crate) fn pinned_items(&self) -> Result<BTreeSet<ItemId>> {

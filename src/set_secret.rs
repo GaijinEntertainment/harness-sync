@@ -62,7 +62,8 @@ fn declared_secrets(paths: &Paths) -> Result<Vec<KeyPath>> {
         return Ok(Vec::new());
     };
     let git = Git::open(paths.repo_dir());
-    let remote_commit = git.resolve(&git::remote_ref(&config.branch))?;
+    let remote_commit =
+        git.resolve(&git::remote_ref(&config.primary, &config.primary()?.branch))?;
     Ok(Declarations::load(&git, remote_commit.as_deref())?.secrets)
 }
 

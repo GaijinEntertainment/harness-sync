@@ -1,28 +1,36 @@
+use std::collections::BTreeMap;
 use std::fs;
 
 use anyhow::{Context, Result, ensure};
 
-use crate::config::Config;
+use crate::config::{Config, Target};
 use crate::git::{self, BASE_REF, Git};
 use crate::paths::Paths;
 use crate::report::{Outcome, Report, short_commit};
 
+const FIRST_TARGET: &str = "origin";
+
 pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
     let config_file = paths.config_file();
+    let target = Target {
+        url: remote.to_owned(),
+        branch: branch.to_owned(),
+    };
     let existing = Config::load(&config_file)?;
     if let Some(existing) = &existing {
+        let primary = existing.primary()?;
         ensure!(
-            existing.remote == remote && existing.branch == branch,
+            *primary == target,
             "this machine is already connected to {} (branch {}); remove {} to connect it to another remote",
-            existing.remote,
-            existing.branch,
+            primary.url,
+            primary.branch,
             paths.state_dir.display()
         );
     }
     let config = existing.unwrap_or_else(|| Config {
-        remote: remote.to_owned(),
-        branch: branch.to_owned(),
+        primary: FIRST_TARGET.to_owned(),
         pins: Vec::new(),
+        targets: BTreeMap::from([(FIRST_TARGET.to_owned(), target)]),
     });
     fs::create_dir_all(&paths.state_dir)
         .with_context(|| format!("cannot create {}", paths.state_dir.display()))?;
@@ -31,10 +39,10 @@ pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
     if !repo_dir.exists() {
         git.init_bare()?;
     }
-    git.set_origin(remote)?;
-    git.fetch()?;
+    git.set_remote(&config.primary, remote)?;
+    git.fetch(&config.primary)?;
     config.save(&config_file)?;
-    let remote_commit = git.resolve(&git::remote_ref(branch))?;
+    let remote_commit = git.resolve(&git::remote_ref(&config.primary, branch))?;
     let summary = remote_commit.as_deref().map_or_else(
         || format!("connected to {remote}; branch {branch} is empty: run `cc-sync push` to create it"),
         |commit| {

@@ -42,11 +42,11 @@ pub(crate) fn run(paths: &Paths) -> Result<Report> {
     let commit = session
         .git
         .commit(session.remote_commit.as_deref(), &changes, &message())?;
-    if let Err(err) = session.git.push(&commit, &session.config.branch) {
-        session.git.fetch()?;
-        let remote_now = session
-            .git
-            .resolve(&git::remote_ref(&session.config.branch))?;
+    let target = &session.config.primary;
+    let branch = &session.config.primary()?.branch;
+    if let Err(err) = session.git.push(target, &commit, branch) {
+        session.git.fetch(target)?;
+        let remote_now = session.git.resolve(&git::remote_ref(target, branch))?;
         if remote_now != session.remote_commit {
             return Ok(remote_ahead(&session));
         }
