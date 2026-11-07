@@ -296,7 +296,8 @@ fn isolated(mut command: Command, home: &Path) -> Command {
         .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("GIT_CONFIG_GLOBAL", home.join(".gitconfig"))
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env_remove("CLAUDE_CONFIG_DIR");
+        .env_remove("CLAUDE_CONFIG_DIR")
+        .env_remove("PI_CODING_AGENT_DIR");
     command
 }
 

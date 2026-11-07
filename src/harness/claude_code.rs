@@ -102,7 +102,7 @@ pub(super) static HARNESS: Harness = Harness {
     ],
     credentials: &[".claude/.credentials.json"],
     commands,
-    undeclared_marketplaces,
+    undeclared_marketplaces: Some(undeclared_marketplaces),
 };
 
 fn commands(id: &ItemId, value: &Value) -> Vec<(KeyPath, String)> {

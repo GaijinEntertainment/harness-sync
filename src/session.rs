@@ -60,12 +60,11 @@ impl Session {
         let declarations = Declarations::load(&git, remote_commit.as_deref())?;
         let local_setup = setup::load_local(paths, &git, &declarations, &selection)?;
         let mut undeclared_marketplaces = Vec::new();
-        for harness in selection.harnesses() {
-            undeclared_marketplaces.extend((harness.undeclared_marketplaces)(
-                paths,
-                &local_setup,
-                &declarations,
-            )?);
+        for check in selection
+            .harnesses()
+            .filter_map(|harness| harness.undeclared_marketplaces)
+        {
+            undeclared_marketplaces.extend(check(paths, &local_setup, &declarations)?);
         }
         let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
         let mut local = secret::local_view(&local_setup, &missing_secrets, &declarations.secrets);

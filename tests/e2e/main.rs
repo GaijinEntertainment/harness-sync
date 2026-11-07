@@ -15,6 +15,8 @@ mod init;
 #[cfg(test)]
 mod marketplaces;
 #[cfg(test)]
+mod pi;
+#[cfg(test)]
 mod pull;
 #[cfg(test)]
 mod push;

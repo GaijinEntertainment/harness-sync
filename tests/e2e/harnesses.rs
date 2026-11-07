@@ -82,7 +82,10 @@ fn harness_add_and_remove_change_the_list_of_the_machine() {
     assert_exit(&removed, 0);
     assert_eq!(
         listed["harnesses"],
-        json!([{"name": "claude-code", "synced": false}])
+        json!([
+            {"name": "claude-code", "synced": false},
+            {"name": "pi", "synced": false}
+        ])
     );
     assert_exit(&unknown, 1);
     assert!(text(&unknown.stderr).contains("there is no harness `vim`"));
