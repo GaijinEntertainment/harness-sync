@@ -5,12 +5,12 @@ use clap::ValueEnum;
 use toml::{Table, Value};
 
 use crate::config::{Config, Kind};
-use crate::declarations::DECLARATIONS_FILE;
-use crate::gerrit;
+use crate::declarations::{DECLARATIONS_FILE, Declarations};
 use crate::git::{self, BASE_REF, Git, TreeChange};
 use crate::item::KeyPath;
 use crate::paths::Paths;
 use crate::report::{DeclarationsReport, Report, Review, TargetPush, short_commit};
+use crate::{gerrit, setup};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum List {
@@ -171,18 +171,18 @@ fn change(
             )
         });
     }
-    let content = toml::to_string(&table)
-        .with_context(|| format!("cannot serialize {DECLARATIONS_FILE}"))?
-        .into_bytes();
+    let content =
+        toml::to_string(&table).with_context(|| format!("cannot serialize {DECLARATIONS_FILE}"))?;
     let parent = repo.head.as_deref();
+    let mut tree = setup::excluded_removals(&repo.git, parent, &Declarations::parse(&content)?)?;
+    tree.push(TreeChange::Write {
+        path: DECLARATIONS_FILE.to_owned(),
+        content: content.into_bytes(),
+        executable: false,
+    });
     let subject = format!("update `{key}` in {DECLARATIONS_FILE}");
     let message = gerrit::message(&repo.git, repo.kind, subject, parent)?;
-    let file = TreeChange::Write {
-        path: DECLARATIONS_FILE.to_owned(),
-        content,
-        executable: false,
-    };
-    let commit = repo.git.commit(parent, slice::from_ref(&file), &message)?;
+    let commit = repo.git.commit(parent, &tree, &message)?;
     let remote_messages = repo.git.push(
         &repo.target,
         &commit,

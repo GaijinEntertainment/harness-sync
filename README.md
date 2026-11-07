@@ -166,7 +166,8 @@ exclude = ["file:statusline-mac.sh", "settings:/model"]
 
 - `secrets` marks every string under each key path as a secret.
 - `include` adds files, whole directories, and `~/.claude.json` keys to the catalog. It never adds the credentials file.
-- `exclude` removes every item under each entry, on every machine.
+- `exclude` removes every item under each entry, on every machine. `cc-sync declarations add exclude` also removes
+  those items from the repo in the same commit.
 
 A secret that a push sent before its key path was declared stays in the git history of the repo; the next push replaces
 it with a placeholder.

@@ -24,6 +24,32 @@ fn an_added_exclude_entry_reaches_the_repo_and_the_next_push_honors_it() {
 }
 
 #[test]
+fn an_exclude_entry_removes_the_items_that_the_repo_already_holds() {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    machine.write_settings(&json!({"model": "opus", "effortLevel": "high"}));
+    machine.write_file(".claude/skills/old/SKILL.md", "Old skill.\n");
+    assert_exit(&machine.cc_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.cc_sync(&["push"]), 0);
+
+    let output = machine.cc_sync(&[
+        "declarations",
+        "add",
+        "exclude",
+        "settings:/model",
+        "file:skills/old",
+    ]);
+
+    assert_exit(&output, 0);
+    let settings: Value = serde_json::from_str(&remote.show("main:settings.json")).unwrap();
+    assert_eq!(settings, json!({"effortLevel": "high"}));
+    let skill = remote.git(&["cat-file", "-e", "main:files/skills/old/SKILL.md"]);
+    assert!(!skill.status.success());
+    let (status, _) = machine.cc_sync_json(&["status"]);
+    assert_eq!(status["items"], json!([]));
+}
+
+#[test]
 fn the_push_after_a_secret_declaration_masks_the_value_in_the_repo() {
     let remote = Remote::new();
     let machine = Machine::new();

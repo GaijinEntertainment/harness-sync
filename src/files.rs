@@ -231,7 +231,7 @@ fn relative(id: &ItemId) -> String {
     id.path.join("/")
 }
 
-fn snapshot_path(id: &ItemId) -> String {
+pub(crate) fn snapshot_path(id: &ItemId) -> String {
     format!("{SNAPSHOT_DIR}/{}", relative(id))
 }
 
