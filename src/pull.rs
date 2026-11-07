@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, ensure};
-use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
@@ -9,17 +8,25 @@ use crate::config::Config;
 use crate::harness::keyed_files;
 use crate::item::{ItemId, Items, KeyPath};
 use crate::json_edit::Edit;
-use crate::output;
 use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, with_missing_secrets};
 use crate::session::Session;
 use crate::setup::Backup;
 use crate::{executables, files, home, secret, setup};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Side {
     Local,
     Remote,
+}
+
+/// The questions that pull asks a person at a terminal.
+pub(crate) trait Prompts {
+    /// Asks which side wins `conflict`; `None` stops the questions about conflicts.
+    fn ask_side(&self, conflict: &ItemReport) -> Result<Option<Side>>;
+
+    /// Asks for the value of the secret at `key`; `None` leaves the secret missing.
+    fn ask_secret(&self, key: &KeyPath) -> Result<Option<String>>;
 }
 
 #[derive(Debug, Clone)]
@@ -44,17 +51,11 @@ impl Choices<'_> {
     }
 }
 
-pub(crate) fn parse_take(text: &str) -> Result<Take, String> {
-    let (id, side) = text
-        .rsplit_once('=')
-        .ok_or_else(|| format!("`{text}` is not ITEM=local or ITEM=remote"))?;
-    Ok(Take {
-        id: id.parse().map_err(|err: anyhow::Error| err.to_string())?,
-        side: Side::from_str(side, true)?,
-    })
-}
-
-pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result<Report> {
+pub(crate) fn run(
+    paths: &Paths,
+    choices: &Choices<'_>,
+    prompts: Option<&dyn Prompts>,
+) -> Result<Report> {
     let session = Session::open(paths)?;
     let differences = session.differences();
     let is_conflict = |id: &ItemId| {
@@ -81,10 +82,9 @@ pub(crate) fn run(paths: &Paths, choices: &Choices<'_>, prompts: bool) -> Result
             "the remote branch is empty: nothing to pull".to_owned(),
         ));
     };
-    let takes = if prompts {
-        ask_sides(&differences, choices)?
-    } else {
-        choices.takes.to_vec()
+    let takes = match prompts {
+        Some(prompts) => ask_sides(prompts, &differences, choices)?,
+        None => choices.takes.to_vec(),
     };
     let choices = &Choices {
         prefer: choices.prefer,
@@ -140,13 +140,17 @@ fn set_base(paths: &Paths, session: &Session, remote_commit: &str) -> Result<()>
     config.save(&config_file)
 }
 
-fn ask_sides(differences: &[Difference<'_>], choices: &Choices<'_>) -> Result<Vec<Take>> {
+fn ask_sides(
+    prompts: &dyn Prompts,
+    differences: &[Difference<'_>],
+    choices: &Choices<'_>,
+) -> Result<Vec<Take>> {
     let mut takes = choices.takes.to_vec();
     let open = differences
         .iter()
         .filter(|d| d.state == ItemState::Conflict && choices.side_for(d.id).is_none());
     for difference in open {
-        let Some(side) = output::ask_side(&ItemReport::from(difference))? else {
+        let Some(side) = prompts.ask_side(&ItemReport::from(difference))? else {
             break;
         };
         takes.push(Take {
@@ -161,16 +165,10 @@ fn apply(
     paths: &Paths,
     session: &Session,
     from_remote: &[&Difference<'_>],
-    prompts: bool,
+    prompts: Option<&dyn Prompts>,
 ) -> Result<(Items, BTreeSet<KeyPath>)> {
     let mut missing = session.missing_secrets.clone();
-    let mut ask = |key: &KeyPath| {
-        if prompts {
-            output::ask_secret(key)
-        } else {
-            Ok(None)
-        }
-    };
+    let mut ask = |key: &KeyPath| prompts.map_or(Ok(None), |prompts| prompts.ask_secret(key));
     let mut writes: Vec<(&ItemId, Option<Value>)> = Vec::new();
     for difference in from_remote {
         let Some(remote) = difference.remote else {
