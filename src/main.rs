@@ -24,6 +24,7 @@ mod session;
 mod set_secret;
 mod setup;
 mod status;
+mod target;
 
 use std::process::ExitCode;
 
@@ -64,6 +65,9 @@ enum Command {
         /// Branch that holds the remote snapshot
         #[arg(long, default_value = "main")]
         branch: String,
+        /// Name of the primary target that the remote becomes
+        #[arg(long, default_value = "origin", value_parser = config::parse_target_name)]
+        name: String,
     },
     /// List the supported items that differ from the remote snapshot
     Status,
@@ -93,6 +97,38 @@ enum Command {
         #[command(subcommand)]
         command: SecretCommand,
     },
+    /// Manage the git repos that this machine pushes to
+    Target {
+        #[command(subcommand)]
+        command: TargetCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum TargetCommand {
+    /// Add a target that push can send the snapshot to
+    Add {
+        /// Name of the target
+        #[arg(value_parser = config::parse_target_name)]
+        name: String,
+        /// URL or path of the git remote
+        url: String,
+        /// Branch that holds the snapshot
+        #[arg(long, default_value = "main")]
+        branch: String,
+    },
+    /// Remove a target that is not the primary
+    Remove {
+        /// Name of the target
+        name: String,
+    },
+    /// Make a target the primary: status and pull read it, and push sends to it
+    Primary {
+        /// Name of the target
+        name: String,
+    },
+    /// List the targets of this machine
+    List,
 }
 
 #[derive(Debug, Subcommand)]
@@ -121,7 +157,11 @@ fn execute(cli: &Cli) -> Result<Report> {
     let paths = Paths::from_env()?;
     let prompts = output::can_prompt(cli.no_input);
     match &cli.command {
-        Command::Init { remote, branch } => init::run(&paths, remote, branch),
+        Command::Init {
+            remote,
+            branch,
+            name,
+        } => init::run(&paths, name, remote, branch),
         Command::Status => status::run(&paths),
         Command::Push => push::run(&paths),
         Command::Pull { prefer, takes } => pull::run(
@@ -137,5 +177,18 @@ fn execute(cli: &Cli) -> Result<Report> {
         Command::Secret {
             command: SecretCommand::Set { key_path },
         } => set_secret::run(&paths, key_path, prompts),
+        Command::Target { command } => match command {
+            TargetCommand::Add { name, url, branch } => target::add(
+                &paths,
+                name,
+                config::Target {
+                    url: url.clone(),
+                    branch: branch.clone(),
+                },
+            ),
+            TargetCommand::Remove { name } => target::remove(&paths, name),
+            TargetCommand::Primary { name } => target::set_primary(&paths, name),
+            TargetCommand::List => target::list(&paths),
+        },
     }
 }

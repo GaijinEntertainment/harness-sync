@@ -47,8 +47,9 @@ cc-sync init git@github.com:you/claude-setup.git
 cc-sync push
 ```
 
-`init` takes `--branch` when the snapshot should live on a branch other than `main`. The machine-local state lives in
-`~/.cc-sync/`: `config.toml` (the remote, the branch, and the pins of this machine), `repo.git` (a bare clone),
+`init` takes `--branch` when the snapshot should live on a branch other than `main`, and `--name` to name the repo
+something other than `origin`; see [Targets](#targets). The machine-local state lives in `~/.cc-sync/`:
+`config.toml` (the targets, the primary target, and the pins of this machine), `repo.git` (a bare clone),
 `missing-secrets.toml`, and `backups/`.
 
 ## Set up another machine
@@ -61,6 +62,22 @@ cc-sync pull --prefer remote
 On a machine that has never pulled, every item that both sides hold with different values is a conflict, so
 `--prefer remote` takes the remote value for all of them. An item that only one side holds comes from that side. Secrets
 do not travel; see [Secrets](#secrets) for how the new machine gets its own values.
+
+## Targets
+
+A machine can keep its setup in several git repos. Each repo is a target with a name, and one target is the primary:
+status and pull read it, and push sends to it. `init` makes the first repo the primary target. Each machine keeps its
+own list in `~/.cc-sync/config.toml`, because the repos a machine can reach differ.
+
+```sh
+cc-sync target add mirror git@example.com:you/claude-setup.git --branch master
+cc-sync target list
+cc-sync target primary mirror
+cc-sync target remove mirror
+```
+
+A new primary target has no base commit on this machine, so the first pull from it stops on each item that differs:
+settle them with `--prefer` or `--take`.
 
 ## Day to day
 

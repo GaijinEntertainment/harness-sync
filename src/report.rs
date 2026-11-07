@@ -38,6 +38,8 @@ pub(crate) struct Report {
     pub(crate) missing_executables: Vec<MissingExecutable>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) undeclared_marketplaces: Vec<UndeclaredMarketplace>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) targets: Vec<TargetReport>,
     #[serde(skip)]
     pub(crate) summary: String,
 }
@@ -53,9 +55,18 @@ impl Report {
             secrets_found: Vec::new(),
             missing_executables: Vec::new(),
             undeclared_marketplaces: Vec::new(),
+            targets: Vec::new(),
             summary,
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct TargetReport {
+    pub(crate) name: String,
+    pub(crate) url: String,
+    pub(crate) branch: String,
+    pub(crate) primary: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]

@@ -85,6 +85,10 @@ impl Git {
         .map(drop)
     }
 
+    pub(crate) fn remove_remote(&self, target: &str) -> Result<()> {
+        self.run(&["remote", "remove", target]).map(drop)
+    }
+
     pub(crate) fn fetch(&self, target: &str) -> Result<()> {
         self.run(&["fetch", "--quiet", "--prune", target]).map(drop)
     }
@@ -181,6 +185,10 @@ impl Git {
 
     pub(crate) fn set_base(&self, commit: &str) -> Result<()> {
         self.run(&["update-ref", BASE_REF, commit]).map(drop)
+    }
+
+    pub(crate) fn clear_base(&self) -> Result<()> {
+        self.run(&["update-ref", "-d", BASE_REF]).map(drop)
     }
 
     fn committer(&self) -> String {
