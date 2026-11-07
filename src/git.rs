@@ -58,8 +58,8 @@ pub(crate) struct TreeEntry {
     pub(crate) executable: bool,
 }
 
-pub(crate) fn remote_ref(branch: &str) -> String {
-    format!("refs/remotes/origin/{branch}")
+pub(crate) fn remote_ref(target: &str, branch: &str) -> String {
+    format!("refs/remotes/{target}/{branch}")
 }
 
 impl Git {
@@ -75,19 +75,18 @@ impl Git {
         run(command, "init").map(drop)
     }
 
-    pub(crate) fn set_origin(&self, url: &str) -> Result<()> {
-        self.run(&["config", "remote.origin.url", url])?;
+    pub(crate) fn set_remote(&self, target: &str, url: &str) -> Result<()> {
+        self.run(&["config", &format!("remote.{target}.url"), url])?;
         self.run(&[
             "config",
-            "remote.origin.fetch",
-            "+refs/heads/*:refs/remotes/origin/*",
+            &format!("remote.{target}.fetch"),
+            &format!("+refs/heads/*:refs/remotes/{target}/*"),
         ])
         .map(drop)
     }
 
-    pub(crate) fn fetch(&self) -> Result<()> {
-        self.run(&["fetch", "--quiet", "--prune", "origin"])
-            .map(drop)
+    pub(crate) fn fetch(&self, target: &str) -> Result<()> {
+        self.run(&["fetch", "--quiet", "--prune", target]).map(drop)
     }
 
     pub(crate) fn resolve(&self, refname: &str) -> Result<Option<String>> {
@@ -170,11 +169,11 @@ impl Git {
             .context("git fast-import did not create the snapshot commit")
     }
 
-    pub(crate) fn push(&self, commit: &str, branch: &str) -> Result<()> {
+    pub(crate) fn push(&self, target: &str, commit: &str, branch: &str) -> Result<()> {
         self.run(&[
             "push",
             "--quiet",
-            "origin",
+            target,
             &format!("{commit}:refs/heads/{branch}"),
         ])
         .map(drop)
