@@ -1,5 +1,4 @@
 use anyhow::{Context, Result, bail};
-use clap::ValueEnum;
 use toml::{Table, Value};
 
 use crate::config::Config;
@@ -10,7 +9,7 @@ use crate::report::{DeclarationsReport, Outcome, Report, Review, TargetPush, sho
 use crate::setup;
 use crate::storage::{self, FileChange, Publish, Storage};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum List {
     Secrets,
     Include,

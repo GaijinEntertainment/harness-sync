@@ -1,11 +1,11 @@
 use std::fmt::Write as _;
 use std::io::{self, ErrorKind, IsTerminal, Write};
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail, ensure};
 
 use crate::compare::ItemState;
 use crate::item::KeyPath;
-use crate::pull::Side;
+use crate::pull::{Prompts, Side};
 use crate::report::{ItemReport, Report};
 use crate::storage::DEFAULT_KIND;
 
@@ -49,37 +49,61 @@ pub(crate) fn can_prompt(no_input: bool) -> bool {
     !no_input && io::stdin().is_terminal() && io::stdout().is_terminal()
 }
 
-pub(crate) fn ask_secret(key: &KeyPath) -> Result<Option<String>> {
-    let value = rpassword::prompt_password(format!("value of the secret {key} (empty to skip): "))?;
-    Ok(Some(value).filter(|value| !value.is_empty()))
-}
+#[derive(Debug)]
+pub(crate) struct Terminal;
 
-pub(crate) fn ask_side(conflict: &ItemReport) -> Result<Option<Side>> {
-    let show = |value: Option<&serde_json::Value>| {
-        value.map_or_else(|| "(absent)".to_owned(), ToString::to_string)
-    };
-    let mut stderr = io::stderr().lock();
-    writeln!(
-        stderr,
-        "conflict: {}\n  local:  {}\n  remote: {}",
-        conflict.id,
-        show(conflict.local.as_ref()),
-        show(conflict.remote.as_ref())
-    )?;
-    loop {
-        write!(stderr, "keep local or take remote? [l/r, empty to stop]: ")?;
-        stderr.flush()?;
-        let mut answer = String::new();
-        if io::stdin().read_line(&mut answer)? == 0 {
-            return Ok(None);
-        }
-        match answer.trim() {
-            "" => return Ok(None),
-            "l" | "local" => return Ok(Some(Side::Local)),
-            "r" | "remote" => return Ok(Some(Side::Remote)),
-            _ => {}
+impl Prompts for Terminal {
+    fn ask_side(&self, conflict: &ItemReport) -> Result<Option<Side>> {
+        let show = |value: Option<&serde_json::Value>| {
+            value.map_or_else(|| "(absent)".to_owned(), ToString::to_string)
+        };
+        let mut stderr = io::stderr().lock();
+        writeln!(
+            stderr,
+            "conflict: {}\n  local:  {}\n  remote: {}",
+            conflict.id,
+            show(conflict.local.as_ref()),
+            show(conflict.remote.as_ref())
+        )?;
+        loop {
+            write!(stderr, "keep local or take remote? [l/r, empty to stop]: ")?;
+            stderr.flush()?;
+            let mut answer = String::new();
+            if io::stdin().read_line(&mut answer)? == 0 {
+                return Ok(None);
+            }
+            match answer.trim() {
+                "" => return Ok(None),
+                "l" | "local" => return Ok(Some(Side::Local)),
+                "r" | "remote" => return Ok(Some(Side::Remote)),
+                _ => {}
+            }
         }
     }
+
+    fn ask_secret(&self, key: &KeyPath) -> Result<Option<String>> {
+        let value =
+            rpassword::prompt_password(format!("value of the secret {key} (empty to skip): "))?;
+        Ok(Some(value).filter(|value| !value.is_empty()))
+    }
+}
+
+pub(crate) fn read_secret(key: &KeyPath, prompts: Option<&dyn Prompts>) -> Result<String> {
+    if let Some(prompts) = prompts {
+        return prompts.ask_secret(key)?.context("no value entered");
+    }
+    if io::stdin().is_terminal() {
+        bail!(
+            "stdin is a terminal but prompts are off: pipe the value on stdin, or run without --no-input and with stdout on the terminal"
+        );
+    }
+    let text =
+        io::read_to_string(io::stdin()).context("cannot read the secret value from stdin")?;
+    let value = text.strip_suffix('\n').map_or(text.as_str(), |line| {
+        line.strip_suffix('\r').unwrap_or(line)
+    });
+    ensure!(!value.is_empty(), "stdin holds no secret value");
+    Ok(value.to_owned())
 }
 
 pub(crate) fn error(err: &anyhow::Error) {

@@ -32,11 +32,13 @@ mod target;
 use std::process::ExitCode;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
+use crate::declare::List;
 use crate::item::{ItemId, KeyPath};
+use crate::output::Terminal;
 use crate::paths::Paths;
-use crate::pull::{Choices, Side, Take};
+use crate::pull::{Choices, Prompts, Side, Take};
 use crate::report::Report;
 
 /// Sync the Claude Code user-level setup between machines through a git repo.
@@ -90,9 +92,9 @@ enum Command {
     Pull {
         /// Side that wins every conflict without a --take
         #[arg(long, value_enum)]
-        prefer: Option<Side>,
+        prefer: Option<SideArg>,
         /// Side that wins the conflict of one item, as ITEM=local or ITEM=remote
-        #[arg(long = "take", value_name = "ITEM=SIDE", value_parser = pull::parse_take)]
+        #[arg(long = "take", value_name = "ITEM=SIDE", value_parser = parse_take)]
         takes: Vec<Take>,
     },
     /// Keep an item as it is on this machine: push and pull leave it alone
@@ -139,7 +141,7 @@ enum DeclarationsCommand {
     Add {
         /// List to change
         #[arg(value_enum)]
-        list: declare::List,
+        list: ListArg,
         /// Key paths or item ids, for example `.claude/settings.json:/extraKnownMarketplaces/NAME`
         #[arg(required = true)]
         entries: Vec<KeyPath>,
@@ -151,7 +153,7 @@ enum DeclarationsCommand {
     Remove {
         /// List to change
         #[arg(value_enum)]
-        list: declare::List,
+        list: ListArg,
         /// Key paths or item ids to remove
         #[arg(required = true)]
         entries: Vec<KeyPath>,
@@ -231,7 +233,7 @@ fn main() -> ExitCode {
 
 fn execute(cli: &Cli) -> Result<Report> {
     let paths = Paths::from_env()?;
-    let prompts = output::can_prompt(cli.no_input);
+    let prompts = output::can_prompt(cli.no_input).then_some(&Terminal as &dyn Prompts);
     match &cli.command {
         Command::Init {
             remote,
@@ -245,7 +247,7 @@ fn execute(cli: &Cli) -> Result<Report> {
         Command::Pull { prefer, takes } => pull::run(
             &paths,
             &Choices {
-                prefer: *prefer,
+                prefer: prefer.map(Side::from),
                 takes,
             },
             prompts,
@@ -254,7 +256,7 @@ fn execute(cli: &Cli) -> Result<Report> {
         Command::Unpin { item } => pin::run(&paths, item, false),
         Command::Secret {
             command: SecretCommand::Set { key_path },
-        } => set_secret::run(&paths, key_path, prompts),
+        } => set_secret::run(&paths, key_path, || output::read_secret(key_path, prompts)),
         Command::Target { command } => match command {
             TargetCommand::Add {
                 name,
@@ -277,14 +279,56 @@ fn execute(cli: &Cli) -> Result<Report> {
                 list,
                 entries,
                 target,
-            } => declare::add(&paths, target.as_deref(), *list, entries),
+            } => declare::add(&paths, target.as_deref(), (*list).into(), entries),
             DeclarationsCommand::Remove {
                 list,
                 entries,
                 target,
-            } => declare::remove(&paths, target.as_deref(), *list, entries),
+            } => declare::remove(&paths, target.as_deref(), (*list).into(), entries),
         },
     }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum SideArg {
+    Local,
+    Remote,
+}
+
+impl From<SideArg> for Side {
+    fn from(side: SideArg) -> Self {
+        match side {
+            SideArg::Local => Self::Local,
+            SideArg::Remote => Self::Remote,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ListArg {
+    Secrets,
+    Include,
+    Exclude,
+}
+
+impl From<ListArg> for List {
+    fn from(list: ListArg) -> Self {
+        match list {
+            ListArg::Secrets => Self::Secrets,
+            ListArg::Include => Self::Include,
+            ListArg::Exclude => Self::Exclude,
+        }
+    }
+}
+
+fn parse_take(text: &str) -> Result<Take, String> {
+    let (id, side) = text
+        .rsplit_once('=')
+        .ok_or_else(|| format!("`{text}` is not ITEM=local or ITEM=remote"))?;
+    Ok(Take {
+        id: id.parse().map_err(|err: anyhow::Error| err.to_string())?,
+        side: SideArg::from_str(side, true)?.into(),
+    })
 }
 
 fn target(url: &str, branch: &str, gerrit: bool) -> config::Target {
