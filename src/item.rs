@@ -6,99 +6,7 @@ use std::str::FromStr;
 use anyhow::{Result, bail, ensure};
 use serde_json::{Map, Value};
 
-pub(crate) const CLAUDE_SETTINGS: &str = ".claude/settings.json";
-
-const SPLIT_SETTINGS_KEYS: [&str; 6] = [
-    "env",
-    "enabledPlugins",
-    "extraKnownMarketplaces",
-    "pluginConfigs",
-    "skillOverrides",
-    "modelSettings",
-];
-
-const CLAUDE_KEYS: [&str; 29] = [
-    "mcpServers",
-    "autoConnectIde",
-    "autoInstallIdeExtension",
-    "claudeInChromeDefaultEnabled",
-    "copyFullResponse",
-    "copyOnSelect",
-    "defaultToAgentsView",
-    "diffTool",
-    "externalEditorContext",
-    "leftArrowOpensAgents",
-    "permissionExplainerEnabled",
-    "prStatusFooterEnabled",
-    "teammateDefaultModel",
-    "respectGitignore",
-    "showTurnDuration",
-    "terminalProgressBarEnabled",
-    "theme",
-    "verbose",
-    "workflowSizeGuideline",
-    "teammateMode",
-    "agentPushNotifEnabled",
-    "inputNeededNotifEnabled",
-    "preferredNotifChannel",
-    "remoteControlAtStartup",
-    "showSpinnerTree",
-    "diffSidebarOpen",
-    "deepLinkTerminal",
-    "lspRecommendationDisabled",
-    "companionMuted",
-];
-
-#[derive(Debug)]
-pub(crate) struct KeyedFile {
-    pub(crate) path: &'static str,
-    keys: Keys,
-    split: &'static [&'static str],
-}
-
-#[derive(Debug)]
-enum Keys {
-    All,
-    Only(&'static [&'static str]),
-}
-
-pub(crate) static KEYED_FILES: [KeyedFile; 2] = [
-    KeyedFile {
-        path: CLAUDE_SETTINGS,
-        keys: Keys::All,
-        split: &SPLIT_SETTINGS_KEYS,
-    },
-    KeyedFile {
-        path: ".claude.json",
-        keys: Keys::Only(&CLAUDE_KEYS),
-        split: &["mcpServers"],
-    },
-];
-
-pub(crate) fn keyed_file(path: &str) -> Option<&'static KeyedFile> {
-    KEYED_FILES.iter().find(|file| file.path == path)
-}
-
-impl KeyedFile {
-    fn holds(&self, key: &str) -> bool {
-        match self.keys {
-            Keys::All => true,
-            Keys::Only(keys) => keys.contains(&key),
-        }
-    }
-
-    fn splits(&self, key: &str) -> bool {
-        self.split.contains(&key)
-    }
-
-    fn item_length(&self, path: &[String]) -> usize {
-        if path.first().is_some_and(|key| self.splits(key)) {
-            2
-        } else {
-            1
-        }
-    }
-}
+use crate::harness::{KeyedFile, keyed_file};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ItemId {
@@ -158,14 +66,18 @@ impl KeyPath {
 
     pub(crate) fn covers(&self, file: &str, path: &[String]) -> bool {
         if self.path.is_empty() {
-            file == self.file
-                || file
-                    .strip_prefix(self.file.as_str())
-                    .is_some_and(|rest| rest.starts_with('/'))
+            is_within(file, &self.file)
         } else {
             file == self.file && path.starts_with(&self.path)
         }
     }
+}
+
+pub(crate) fn is_within(file: &str, dir: &str) -> bool {
+    file == dir
+        || file
+            .strip_prefix(dir)
+            .is_some_and(|rest| rest.starts_with('/'))
 }
 
 impl fmt::Display for ItemId {
@@ -270,7 +182,8 @@ pub(crate) fn json_items(file: &KeyedFile, document: Value, include: &[KeyPath])
 
 #[cfg(test)]
 pub(crate) fn settings_items(document: Value) -> Result<Items> {
-    json_items(&KEYED_FILES[0], document, &[])
+    let settings = keyed_file(".claude/settings.json").expect("Claude Code has settings.json");
+    json_items(settings, document, &[])
 }
 
 pub(crate) fn json_document(items: &Items, file: &str) -> Value {
@@ -307,10 +220,12 @@ mod tests {
 
     use super::*;
 
+    const CLAUDE_SETTINGS: &str = ".claude/settings.json";
+
     #[test]
     fn claude_json_gives_the_catalog_and_included_keys_and_one_item_per_mcp_server() {
         let items = json_items(
-            &KEYED_FILES[1],
+            keyed_file(".claude.json").unwrap(),
             json!({
                 "numStartups": 12,
                 "oauthAccount": {"emailAddress": "me@example.com"},

@@ -4,15 +4,10 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::item::{Items, keyed_file};
+use crate::harness::{self, keyed_file};
+use crate::item::{Items, is_within};
 use crate::paths::Paths;
 
-const NEVER_REFERENCED: [&str; 4] = [
-    ".claude/plugins/",
-    ".claude/projects/",
-    ".claude/skills/synced/",
-    ".claude/.credentials.json",
-];
 const WORD_SEPARATORS: [char; 11] = [' ', '\t', '\n', '"', '\'', '=', '(', ')', ';', '&', '|'];
 
 pub(crate) fn find(paths: &Paths, json: &Items, catalog: &[String]) -> Vec<String> {
@@ -92,14 +87,15 @@ fn resolve(paths: &Paths, raw: &str, base: Option<&Path>) -> Option<String> {
         None => base?.join(raw),
     };
     let normal = normalize(&path)?;
-    if !normal.starts_with(&paths.claude_dir) {
-        return None;
-    }
     let file = paths.home_path(&normal)?;
-    let allowed = keyed_file(&file).is_none()
-        && !NEVER_REFERENCED
+    let harness = harness::owner(&file)?;
+    let allowed = paths.local(&file) == normal
+        && keyed_file(&file).is_none()
+        && !harness::is_credentials(&file)
+        && !harness
+            .never_referenced
             .iter()
-            .any(|prefix| file.starts_with(prefix));
+            .any(|dir| is_within(&file, dir));
     (allowed && fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file()))
         .then_some(file)
 }

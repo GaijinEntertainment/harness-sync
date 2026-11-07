@@ -8,24 +8,13 @@ use serde_json::{Value, json};
 use crate::atomic;
 use crate::declarations::DECLARATIONS_FILE;
 use crate::git::{Git, TreeChange};
-use crate::item::{ItemId, Items, KeyPath, keyed_file};
-use crate::paths::{self, Paths};
+use crate::harness::{self, HARNESSES, keyed_file};
+use crate::item::{ItemId, Items, KeyPath};
+use crate::paths::Paths;
 use crate::setup::Backup;
 use crate::{references, secret};
 
-const CATALOG_FILES: [&str; 2] = [".claude/CLAUDE.md", ".claude/keybindings.json"];
-const CATALOG_DIRS: [&str; 7] = [
-    ".claude/rules",
-    ".claude/skills",
-    ".claude/agents",
-    ".claude/commands",
-    ".claude/output-styles",
-    ".claude/workflows",
-    ".claude/themes",
-];
-const SKIPPED_DIRS: [&str; 2] = [".claude/skills/synced", ".claude/skills/.trash"];
 const SKIPPED_NAMES: [&str; 1] = [".DS_Store"];
-const CREDENTIALS_FILE: &str = ".claude/.credentials.json";
 
 pub(crate) fn load_local(
     git: &Git,
@@ -34,13 +23,15 @@ pub(crate) fn load_local(
     include: &[KeyPath],
 ) -> Result<Items> {
     let mut files = Vec::new();
-    for file in CATALOG_FILES {
-        if is_regular_file(&paths.local(file))? {
-            files.push(file.to_owned());
+    for harness in HARNESSES {
+        for &file in harness.files {
+            if is_regular_file(&paths.local(file))? {
+                files.push(file.to_owned());
+            }
         }
-    }
-    for dir in CATALOG_DIRS {
-        walk(paths, dir, &mut files)?;
+        for dir in harness.dirs {
+            walk(paths, dir, &mut files)?;
+        }
     }
     for included in include.iter().filter(|path| is_file_include(path)) {
         if is_regular_file(&paths.local(&included.file))? {
@@ -64,11 +55,11 @@ pub(crate) fn load_local(
 }
 
 fn is_file_include(path: &KeyPath) -> bool {
-    path.path.is_empty() && keyed_file(&path.file).is_none() && path.file != CREDENTIALS_FILE
+    path.path.is_empty() && keyed_file(&path.file).is_none() && !harness::is_credentials(&path.file)
 }
 
 fn walk(paths: &Paths, relative: &str, found: &mut Vec<String>) -> Result<()> {
-    if SKIPPED_DIRS.contains(&relative) {
+    if harness::is_skipped_dir(relative) {
         return Ok(());
     }
     let dir = paths.local(relative);
@@ -124,11 +115,14 @@ pub(crate) fn load_snapshot(git: &Git, commit: &str, include: &[KeyPath]) -> Res
 }
 
 fn is_snapshot_file(file: &str, include: &[KeyPath]) -> bool {
-    let synced = paths::is_harness_path(file)
+    let synced = harness::owner(file).is_some()
         || include
             .iter()
             .any(|path| is_file_include(path) && path.covers(file, &[]));
-    synced && keyed_file(file).is_none() && file != CREDENTIALS_FILE && file != DECLARATIONS_FILE
+    synced
+        && keyed_file(file).is_none()
+        && !harness::is_credentials(file)
+        && file != DECLARATIONS_FILE
 }
 
 pub(crate) fn changes(outgoing: &Items, remote: &Items, paths: &Paths) -> Result<Vec<TreeChange>> {

@@ -5,7 +5,8 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
-use crate::item::{ItemId, Items, KEYED_FILES, KeyPath};
+use crate::harness::keyed_files;
+use crate::item::{ItemId, Items, KeyPath};
 use crate::json_edit::Edit;
 use crate::output;
 use crate::paths::Paths;
@@ -191,7 +192,7 @@ fn apply(
 
 fn write(paths: &Paths, session: &Session, writes: &[(&ItemId, Option<Value>)]) -> Result<()> {
     let backup = Backup::new(paths);
-    for keyed in &KEYED_FILES {
+    for keyed in keyed_files() {
         let edits: Vec<Edit<'_>> = writes
             .iter()
             .filter(|(id, _)| id.file == keyed.path && !id.is_whole_file())

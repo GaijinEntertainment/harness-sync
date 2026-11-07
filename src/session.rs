@@ -7,10 +7,11 @@ use crate::compare::{Difference, ItemState};
 use crate::config::{Config, Kind};
 use crate::declarations::Declarations;
 use crate::git::{self, BASE_REF, Git};
+use crate::harness::HARNESSES;
 use crate::item::{ItemId, Items, KeyPath};
 use crate::paths::Paths;
 use crate::report::UndeclaredMarketplace;
-use crate::{files, home, marketplaces, secret, setup};
+use crate::{files, home, secret, setup};
 
 #[derive(Debug)]
 pub(crate) struct Session {
@@ -56,7 +57,14 @@ impl Session {
         let pins = config.pinned_items()?;
         let declarations = Declarations::load(&git, remote_commit.as_deref())?;
         let local_setup = setup::load_local(paths, &git, &declarations)?;
-        let undeclared_marketplaces = marketplaces::undeclared(paths, &local_setup, &declarations)?;
+        let mut undeclared_marketplaces = Vec::new();
+        for harness in HARNESSES {
+            undeclared_marketplaces.extend((harness.undeclared_marketplaces)(
+                paths,
+                &local_setup,
+                &declarations,
+            )?);
+        }
         let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
         let mut local = secret::local_view(&local_setup, &missing_secrets, &declarations.secrets);
         for value in local.values_mut() {
