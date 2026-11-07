@@ -27,6 +27,10 @@ fn authored_files_move_with_their_mode() {
         ".claude/skills/synced/remote/SKILL.md",
         "claude.ai owns this\n",
     );
+    first.write_file(
+        ".claude/skills/.trash/1792400872796-81361-NfxPAe/old/SKILL.md",
+        "removed skill\n",
+    );
     first.write_file(".claude/rules/.DS_Store", "finder\n");
     first.write_file(".claude/history.jsonl", "{}\n");
     assert_exit(&first.cc_sync(&["push"]), 0);
@@ -55,6 +59,7 @@ fn authored_files_move_with_their_mode() {
     );
     for skipped in [
         "skills/synced/remote/SKILL.md",
+        "skills/.trash/1792400872796-81361-NfxPAe/old/SKILL.md",
         "rules/.DS_Store",
         "history.jsonl",
     ] {
