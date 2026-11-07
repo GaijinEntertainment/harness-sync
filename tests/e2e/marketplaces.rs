@@ -28,12 +28,16 @@ struct Bin {
 
 impl Bin {
     fn with_fake_claude() -> Self {
+        Self::with_fake_claude_running("")
+    }
+
+    fn with_fake_claude_running(script: &str) -> Self {
         let bin = Self::new();
         let claude = bin.dir.path().join("claude");
         let log = bin.log_file();
         fs::write(
             &claude,
-            format!("#!/bin/sh\necho \"$@\" >> '{}'\n", log.display()),
+            format!("#!/bin/sh\necho \"$@\" >> '{}'\n{script}", log.display()),
         )
         .unwrap();
         fs::set_permissions(&claude, fs::Permissions::from_mode(0o755)).unwrap();
@@ -113,6 +117,43 @@ fn a_marketplace_added_on_one_machine_is_added_on_the_other_through_the_claude_c
         "tree: {tree}"
     );
     assert!(!remote.all_objects().contains("installLocation"));
+}
+
+#[test]
+fn pull_puts_back_the_auto_update_that_marketplace_add_drops_from_the_declaration() {
+    let remote = Remote::new();
+    let first = Machine::new();
+    first.write_file(
+        ".claude/plugins/known_marketplaces.json",
+        r#"{"acme": {"source": {"source": "github", "repo": "acme/plugins"}, "autoUpdate": true}}"#,
+    );
+    assert_exit(&first.cc_sync(&["init", &remote.url()]), 0);
+    assert_exit(&first.cc_sync(&["push"]), 0);
+    let second = Machine::new();
+    assert_exit(&second.cc_sync(&["init", &remote.url()]), 0);
+    let declaration = r#"{"source": {"source": "github", "repo": "acme/plugins"}}"#;
+    let bin = Bin::with_fake_claude_running(&format!(
+        "/bin/mkdir -p \"$HOME/.claude/plugins\"\n\
+         echo '{{\"extraKnownMarketplaces\": {{\"acme\": {declaration}}}}}' > \"$HOME/.claude/settings.json\"\n\
+         echo '{{\"acme\": {declaration}}}' > \"$HOME/.claude/plugins/known_marketplaces.json\"\n"
+    ));
+
+    let output = second.cc_sync_with_path(&bin.path(), &["pull"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(
+        second.settings()["extraKnownMarketplaces"]["acme"],
+        json!({"source": {"source": "github", "repo": "acme/plugins"}, "autoUpdate": true})
+    );
+    let (status, _) = second.cc_sync_json(&["status"]);
+    assert!(
+        !status["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["id"] == "marketplace:acme"),
+        "status: {status}"
+    );
 }
 
 #[test]

@@ -13,7 +13,8 @@ use crate::item::{ItemId, Items, JsonFile, Source};
 use crate::paths::Paths;
 
 const SNAPSHOT_FILE: &str = "plugins/marketplaces.json";
-const SYNCED_FIELDS: [&str; 2] = ["source", "autoUpdate"];
+const AUTO_UPDATE: &str = "autoUpdate";
+const SYNCED_FIELDS: [&str; 2] = ["source", AUTO_UPDATE];
 const DECLARATION_KEY: &str = "extraKnownMarketplaces";
 
 pub(crate) fn load_local(paths: &Paths, settings: &Items) -> Result<Items> {
@@ -116,6 +117,21 @@ pub(crate) fn apply(
                 .and_then(|args| run_claude(&args))
                 .err()
                 .map(|err| format!("{id}: {err:#}"))
+        })
+        .collect()
+}
+
+pub(crate) fn auto_updates<'a>(
+    changes: &[(&ItemId, Option<&'a Value>)],
+    declared: &BTreeSet<String>,
+) -> Vec<(Vec<String>, &'a Value)> {
+    changes
+        .iter()
+        .filter(|(id, _)| !declared.contains(&id.path.join("/")))
+        .filter_map(|(id, value)| {
+            let flag = (*value)?.get(AUTO_UPDATE)?;
+            let path = [DECLARATION_KEY, &id.path.join("/"), AUTO_UPDATE].map(str::to_owned);
+            Some((path.to_vec(), flag))
         })
         .collect()
 }

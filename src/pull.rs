@@ -5,7 +5,7 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
-use crate::item::{ItemId, Items, JSON_SOURCES, KeyPath, Source};
+use crate::item::{ItemId, Items, JSON_SOURCES, JsonFile, KeyPath, Source};
 use crate::json_edit::Edit;
 use crate::output;
 use crate::paths::Paths;
@@ -232,6 +232,17 @@ fn write(paths: &Paths, session: &Session, writes: &[(&ItemId, Option<Value>)]) 
          fix the cause and run `cc-sync pull` again:\n  {}",
         failures.join("\n  ")
     );
+    let auto_updates = marketplaces::auto_updates(&marketplace_changes, &declared);
+    let edits: Vec<Edit<'_>> = auto_updates
+        .iter()
+        .map(|(path, flag)| Edit {
+            path,
+            value: Some(*flag),
+        })
+        .collect();
+    if !edits.is_empty() {
+        setup::write_local(paths, &backup, JsonFile::Settings, &edits)?;
+    }
     Ok(())
 }
 
