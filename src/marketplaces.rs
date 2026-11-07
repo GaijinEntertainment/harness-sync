@@ -25,9 +25,13 @@ pub(crate) fn load_local(paths: &Paths, settings: &Items) -> Result<Items> {
         Err(err) => return Err(err).with_context(|| format!("cannot read {}", path.display())),
     };
     for (name, declaration) in declarations(settings) {
-        items
+        if let Some(fields) = items
             .entry(item_id(name))
-            .or_insert_with(|| synced_fields(declaration));
+            .or_insert_with(|| Value::Object(Map::new()))
+            .as_object_mut()
+        {
+            fields.extend(synced_fields(declaration));
+        }
     }
     Ok(items)
 }
@@ -69,20 +73,18 @@ fn parse(bytes: &[u8]) -> Result<Items> {
     };
     Ok(marketplaces
         .into_iter()
-        .map(|(name, record)| (item_id(&name), synced_fields(&record)))
+        .map(|(name, record)| (item_id(&name), Value::Object(synced_fields(&record))))
         .collect())
 }
 
-fn synced_fields(record: &Value) -> Value {
-    Value::Object(
-        record
-            .as_object()
-            .into_iter()
-            .flatten()
-            .filter(|(field, _)| SYNCED_FIELDS.contains(&field.as_str()))
-            .map(|(field, value)| (field.clone(), value.clone()))
-            .collect(),
-    )
+fn synced_fields(record: &Value) -> Map<String, Value> {
+    record
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(field, _)| SYNCED_FIELDS.contains(&field.as_str()))
+        .map(|(field, value)| (field.clone(), value.clone()))
+        .collect()
 }
 
 pub(crate) fn snapshot_change(items: &Items) -> Result<TreeChange> {
@@ -182,6 +184,31 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::item::settings_items;
+
+    #[test]
+    fn a_declaration_sets_the_auto_update_of_its_marketplace_over_the_install_record() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = Paths::for_home(home.path());
+        let known = paths.known_marketplaces_file();
+        fs::create_dir_all(known.parent().unwrap()).unwrap();
+        fs::write(
+            &known,
+            br#"{"acme": {"source": {"source": "github", "repo": "acme/plugins"}, "autoUpdate": true},
+                 "team": {"source": {"source": "github", "repo": "team/plugins"}, "autoUpdate": true}}"#,
+        )
+        .unwrap();
+        let settings = settings_items(json!({"extraKnownMarketplaces": {
+            "acme": {"source": {"source": "github", "repo": "acme/plugins"}, "autoUpdate": false},
+            "team": {"source": {"source": "github", "repo": "team/plugins"}}
+        }}))
+        .unwrap();
+
+        let items = load_local(&paths, &settings).unwrap();
+
+        assert_eq!(items[&item_id("acme")]["autoUpdate"], false);
+        assert_eq!(items[&item_id("team")]["autoUpdate"], true);
+    }
 
     #[test]
     fn a_marketplace_item_keeps_the_source_and_drops_the_install_record() {
