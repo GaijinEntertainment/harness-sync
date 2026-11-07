@@ -12,6 +12,12 @@ pub(crate) struct Machine {
 
 impl Machine {
     pub(crate) fn new() -> Self {
+        let machine = Self::without_harnesses();
+        fs::create_dir(machine.home().join(".claude")).expect("create the Claude Code directory");
+        machine
+    }
+
+    pub(crate) fn without_harnesses() -> Self {
         let home = tempfile::tempdir().expect("create a temporary home directory");
         fs::write(
             home.path().join(".gitconfig"),

@@ -49,9 +49,13 @@ harness-sync push
 ```
 
 `init` takes `--branch` when the snapshot should live on a branch other than `main`, and `--name` to name the repo
-something other than `origin`; see [Targets](#targets). The machine-local state lives in `~/.harness-sync/`:
-`config.toml` (the targets, the primary target, and the pins of this machine), `repo.git` (a bare clone),
-`missing-secrets.toml`, and `backups/`.
+something other than `origin`; see [Targets](#targets). It syncs each harness whose directory exists on the machine;
+`--harness claude-code` names the harnesses instead, and `harness-sync harness add|remove|list` changes the list later.
+The machine-local state lives in `~/.harness-sync/`: `config.toml` (the harnesses, the targets, the primary target, and
+the pins of this machine), `repo.git` (a bare clone), `missing-secrets.toml`, and `backups/`.
+
+A machine reads and writes only the items of the harnesses it syncs. Push leaves the items of other harnesses in the
+repo as they are.
 
 ## Set up another machine
 
@@ -223,8 +227,9 @@ A report looks like this:
 - `pushes` lists `{target, outcome, commit, review, items}` for each target that a push reached; `review` holds
   the pushed `commit` and the `change_url` for a Gerrit target. The top-level `items`,
   `base_commit`, and `remote_commit` belong to the primary target; the `items` of another target list what the push
-  replaced there. `targets` lists `{name, url, branch, kind, primary}` for `target list`, and `declarations` lists
-  `{target, secrets, include, exclude}` for the `declarations` commands.
+  replaced there. `targets` lists `{name, url, branch, kind, primary}` for `target list`, `harnesses` lists
+  `{name, synced}` for `harness list`, and `declarations` lists `{target, secrets, include, exclude}` for the
+  `declarations` commands.
 - A file item shows its git blob id and executable bit in place of its content.
 
 Item ids name what `--take`, `pin`, and `unpin` act on. An item id is the path of the file relative to the home

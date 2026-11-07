@@ -7,11 +7,14 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::atomic;
+use crate::harness::Selection;
 use crate::item::ItemId;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Config {
     pub(crate) primary: String,
+    #[serde(default)]
+    pub(crate) harnesses: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) pins: Vec<String>,
     pub(crate) targets: BTreeMap<String, Target>,
@@ -81,6 +84,10 @@ impl Config {
                 self.primary
             )
         })
+    }
+
+    pub(crate) fn selection(&self) -> Result<Selection> {
+        Selection::new(&self.harnesses)
     }
 
     pub(crate) fn pinned_items(&self) -> Result<BTreeSet<ItemId>> {

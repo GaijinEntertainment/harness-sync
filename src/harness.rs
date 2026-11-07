@@ -1,6 +1,6 @@
 mod claude_code;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::declarations::Declarations;
@@ -16,6 +16,7 @@ pub(crate) type MarketplaceCheck =
 
 #[derive(Debug)]
 pub(crate) struct Harness {
+    pub(crate) name: &'static str,
     pub(crate) roots: &'static [Root],
     pub(crate) keyed_files: &'static [KeyedFile],
     pub(crate) files: &'static [&'static str],
@@ -93,6 +94,56 @@ pub(crate) fn is_skipped_dir(dir: &str) -> bool {
     HARNESSES
         .iter()
         .any(|harness| harness.skipped_dirs.contains(&dir))
+}
+
+pub(crate) fn by_name(name: &str) -> Result<&'static Harness> {
+    HARNESSES
+        .iter()
+        .copied()
+        .find(|harness| harness.name == name)
+        .with_context(|| {
+            let names: Vec<&str> = HARNESSES.iter().map(|harness| harness.name).collect();
+            format!(
+                "there is no harness `{name}`; harness-sync syncs {}",
+                names.join(", ")
+            )
+        })
+}
+
+impl Harness {
+    pub(crate) fn is_present(&self, paths: &Paths) -> bool {
+        self.roots
+            .iter()
+            .any(|root| paths.local(root.path).exists())
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct Selection {
+    harnesses: Vec<&'static Harness>,
+}
+
+impl Selection {
+    pub(crate) fn new(names: &[String]) -> Result<Self> {
+        let harnesses = names
+            .iter()
+            .map(|name| by_name(name))
+            .collect::<Result<_>>()
+            .context("cannot read the harnesses of the sync configuration")?;
+        Ok(Self { harnesses })
+    }
+
+    pub(crate) fn harnesses(&self) -> impl Iterator<Item = &'static Harness> + '_ {
+        self.harnesses.iter().copied()
+    }
+
+    pub(crate) fn syncs(&self, file: &str) -> bool {
+        owner(file).is_none_or(|owner| {
+            self.harnesses
+                .iter()
+                .any(|harness| harness.name == owner.name)
+        })
+    }
 }
 
 #[cfg(test)]

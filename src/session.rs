@@ -7,7 +7,7 @@ use crate::compare::{Difference, ItemState};
 use crate::config::{Config, Kind};
 use crate::declarations::Declarations;
 use crate::git::{self, BASE_REF, Git};
-use crate::harness::HARNESSES;
+use crate::harness::Selection;
 use crate::item::{ItemId, Items, KeyPath};
 use crate::paths::Paths;
 use crate::report::UndeclaredMarketplace;
@@ -23,6 +23,7 @@ pub(crate) struct Session {
     pub(crate) base_commit: Option<String>,
     pub(crate) remote_commit: Option<String>,
     pub(crate) pins: BTreeSet<ItemId>,
+    pub(crate) selection: Selection,
     pub(crate) declarations: Declarations,
     pub(crate) local_setup: Items,
     pub(crate) undeclared_marketplaces: Vec<UndeclaredMarketplace>,
@@ -55,10 +56,11 @@ impl Session {
             remote_commit.clone()
         };
         let pins = config.pinned_items()?;
+        let selection = config.selection()?;
         let declarations = Declarations::load(&git, remote_commit.as_deref())?;
-        let local_setup = setup::load_local(paths, &git, &declarations)?;
+        let local_setup = setup::load_local(paths, &git, &declarations, &selection)?;
         let mut undeclared_marketplaces = Vec::new();
-        for harness in HARNESSES {
+        for harness in selection.harnesses() {
             undeclared_marketplaces.extend((harness.undeclared_marketplaces)(
                 paths,
                 &local_setup,
@@ -70,9 +72,10 @@ impl Session {
         for value in local.values_mut() {
             home::tokenize(value, &paths.home);
         }
-        let remote = setup::load_snapshot(&git, remote_commit.as_deref(), &declarations)?;
+        let remote =
+            setup::load_snapshot(&git, remote_commit.as_deref(), &declarations, &selection)?;
         let base = if primary {
-            setup::load_snapshot(&git, base_commit.as_deref(), &declarations)?
+            setup::load_snapshot(&git, base_commit.as_deref(), &declarations, &selection)?
         } else {
             remote.clone()
         };
@@ -93,6 +96,7 @@ impl Session {
             base_commit,
             remote_commit,
             pins,
+            selection,
             declarations,
             local_setup,
             undeclared_marketplaces,
