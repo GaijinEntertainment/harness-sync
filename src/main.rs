@@ -20,6 +20,7 @@ mod pin;
 mod pull;
 mod push;
 mod references;
+mod registry;
 mod report;
 mod secret;
 mod session;
@@ -39,7 +40,13 @@ use crate::item::{ItemId, KeyPath};
 use crate::output::Terminal;
 use crate::paths::Paths;
 use crate::pull::{Choices, Prompts, Side, Take};
+use crate::registry::Registry;
 use crate::report::Report;
+
+static REGISTRY: Registry = Registry {
+    harnesses: &[&harness::claude_code::HARNESS, &harness::pi::HARNESS],
+    storage_kinds: &[&git::GIT, &git::GERRIT],
+};
 
 /// Sync the Claude Code user-level setup between machines through a git repo.
 #[derive(Debug, Parser)]
@@ -232,6 +239,7 @@ fn main() -> ExitCode {
 }
 
 fn execute(cli: &Cli) -> Result<Report> {
+    registry::install(&REGISTRY)?;
     let paths = Paths::from_env()?;
     let prompts = output::can_prompt(cli.no_input).then_some(&Terminal as &dyn Prompts);
     match &cli.command {

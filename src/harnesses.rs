@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::config::Config;
-use crate::harness::{self, HARNESSES};
+use crate::harness;
 use crate::paths::Paths;
 use crate::report::{HarnessReport, Report};
 use crate::storage;
@@ -54,7 +54,7 @@ pub(crate) fn remove(paths: &Paths, name: &str) -> Result<Report> {
 
 pub(crate) fn list(paths: &Paths) -> Result<Report> {
     let config = Config::load_connected(&paths.config_file())?;
-    let harnesses = HARNESSES
+    let harnesses = harness::all()
         .iter()
         .map(|harness| HarnessReport {
             name: harness.name,

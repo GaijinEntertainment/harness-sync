@@ -5,7 +5,7 @@ use crate::item::{ItemId, KeyPath};
 
 const MCP: &str = ".pi/agent/mcp.json";
 
-pub(super) static HARNESS: Harness = Harness {
+pub(crate) static HARNESS: Harness = Harness {
     name: "pi",
     roots: &[Root {
         path: ".pi/agent",
