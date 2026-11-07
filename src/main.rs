@@ -6,6 +6,7 @@ mod config;
 mod declarations;
 mod executables;
 mod files;
+mod gerrit;
 mod git;
 mod home;
 mod init;

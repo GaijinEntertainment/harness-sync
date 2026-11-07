@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
-use std::process::{self, Command};
-use std::time::SystemTime;
+use std::process::Command;
 
 use anyhow::{Context, Result, ensure};
 
@@ -11,7 +10,7 @@ use crate::item::KeyPath;
 use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, Review, TargetPush, short_commit};
 use crate::session::Session;
-use crate::{files, secret, setup};
+use crate::{files, gerrit, secret, setup};
 
 pub(crate) fn run(paths: &Paths, to: &[String]) -> Result<Report> {
     let config = Config::load_connected(&paths.config_file())?;
@@ -76,13 +75,10 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
         return Ok((secrets_found(session, &differences, &found), None));
     }
     let parent = session.remote_commit.as_deref();
-    let commit = session.git.commit(parent, &changes, &message(session)?)?;
+    let message = gerrit::message(&session.git, session.kind, subject(), parent)?;
+    let commit = session.git.commit(parent, &changes, &message)?;
     let gerrit = session.kind == Kind::Gerrit;
-    let destination = if gerrit {
-        format!("refs/for/{}", session.branch)
-    } else {
-        format!("refs/heads/{}", session.branch)
-    };
+    let destination = gerrit::destination(session.kind, &session.branch);
     let remote_messages = match session.git.push(&session.target, &commit, &destination) {
         Ok(messages) => messages,
         Err(err) => {
@@ -100,7 +96,7 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
     };
     if gerrit {
         let review = Review {
-            change_url: change_url(&remote_messages),
+            change_url: gerrit::change_url(&remote_messages),
             commit: commit.clone(),
         };
         let summary = format!(
@@ -123,15 +119,6 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
     pushed.base_commit = Some(commit.clone());
     pushed.remote_commit = Some(commit);
     Ok((pushed, None))
-}
-
-fn change_url(remote_messages: &str) -> Option<String> {
-    remote_messages
-        .lines()
-        .filter_map(|line| line.strip_prefix("remote:"))
-        .flat_map(str::split_whitespace)
-        .find(|word| word.starts_with("https://") || word.starts_with("http://"))
-        .map(str::to_owned)
 }
 
 fn combine(pushed: Vec<(Session, Report, Option<Review>)>) -> Report {
@@ -203,8 +190,8 @@ fn remote_ahead(session: &Session) -> Report {
     }
 }
 
-fn message(session: &Session) -> Result<String> {
-    let subject = Command::new("hostname")
+fn subject() -> String {
+    Command::new("hostname")
         .output()
         .ok()
         .filter(|output| output.status.success())
@@ -213,35 +200,5 @@ fn message(session: &Session) -> Result<String> {
         .map_or_else(
             || "cc-sync push".to_owned(),
             |host| format!("cc-sync push from {host}"),
-        );
-    if session.kind != Kind::Gerrit {
-        return Ok(subject);
-    }
-    let seed = format!(
-        "{subject}\n{}\n{:?}\n{}",
-        session.remote_commit.as_deref().unwrap_or_default(),
-        SystemTime::now(),
-        process::id()
-    );
-    Ok(format!(
-        "{subject}\n\nChange-Id: I{}",
-        session.git.hash_text(&seed)?
-    ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_change_url_comes_from_the_remote_messages_of_gerrit() {
-        let messages = "remote: \nremote: Processing changes: refs: 1, new: 1, done\nremote: New Changes:        \n\
-                        remote:   https://gerrit.example/c/setup/+/42 cc-sync push from host [NEW]        \n";
-
-        assert_eq!(
-            change_url(messages).as_deref(),
-            Some("https://gerrit.example/c/setup/+/42")
-        );
-        assert_eq!(change_url("remote: Resolving deltas\n"), None);
-    }
+        )
 }
