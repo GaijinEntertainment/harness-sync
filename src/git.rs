@@ -173,14 +173,19 @@ impl Git {
             .context("git fast-import did not create the snapshot commit")
     }
 
-    pub(crate) fn push(&self, target: &str, commit: &str, branch: &str) -> Result<()> {
-        self.run(&[
+    pub(crate) fn push(&self, target: &str, commit: &str, destination: &str) -> Result<String> {
+        let output = self.run(&[
             "push",
             "--quiet",
             target,
-            &format!("{commit}:refs/heads/{branch}"),
-        ])
-        .map(drop)
+            &format!("{commit}:{destination}"),
+        ])?;
+        Ok(String::from_utf8_lossy(&output.stderr).into_owned())
+    }
+
+    pub(crate) fn hash_text(&self, text: &str) -> Result<String> {
+        let output = self.run_with_input(&["hash-object", "--stdin"], text.as_bytes().to_vec())?;
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
     }
 
     pub(crate) fn set_base(&self, commit: &str) -> Result<()> {

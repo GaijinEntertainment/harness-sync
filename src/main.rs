@@ -68,6 +68,9 @@ enum Command {
         /// Name of the primary target that the remote becomes
         #[arg(long, default_value = "origin", value_parser = config::parse_target_name)]
         name: String,
+        /// The remote is a Gerrit project: push sends each snapshot as a change for review
+        #[arg(long)]
+        gerrit: bool,
     },
     /// List the supported items that differ from the remote snapshot
     Status,
@@ -120,6 +123,9 @@ enum TargetCommand {
         /// Branch that holds the snapshot
         #[arg(long, default_value = "main")]
         branch: String,
+        /// The target is a Gerrit project: push sends each snapshot as a change for review
+        #[arg(long)]
+        gerrit: bool,
     },
     /// Remove a target that is not the primary
     Remove {
@@ -165,7 +171,8 @@ fn execute(cli: &Cli) -> Result<Report> {
             remote,
             branch,
             name,
-        } => init::run(&paths, name, remote, branch),
+            gerrit,
+        } => init::run(&paths, name, target(remote, branch, *gerrit)),
         Command::Status => status::run(&paths),
         Command::Push { to } => push::run(&paths, to),
         Command::Pull { prefer, takes } => pull::run(
@@ -182,17 +189,23 @@ fn execute(cli: &Cli) -> Result<Report> {
             command: SecretCommand::Set { key_path },
         } => set_secret::run(&paths, key_path, prompts),
         Command::Target { command } => match command {
-            TargetCommand::Add { name, url, branch } => target::add(
-                &paths,
+            TargetCommand::Add {
                 name,
-                config::Target {
-                    url: url.clone(),
-                    branch: branch.clone(),
-                },
-            ),
+                url,
+                branch,
+                gerrit,
+            } => target::add(&paths, name, target(url, branch, *gerrit)),
             TargetCommand::Remove { name } => target::remove(&paths, name),
             TargetCommand::Primary { name } => target::set_primary(&paths, name),
             TargetCommand::List => target::list(&paths),
         },
+    }
+}
+
+fn target(url: &str, branch: &str, gerrit: bool) -> config::Target {
+    config::Target {
+        url: url.to_owned(),
+        branch: branch.to_owned(),
+        kind: config::Kind::from_gerrit_flag(gerrit),
     }
 }

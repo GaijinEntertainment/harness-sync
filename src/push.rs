@@ -1,14 +1,15 @@
 use std::collections::BTreeSet;
-use std::process::Command;
+use std::process::{self, Command};
+use std::time::SystemTime;
 
 use anyhow::{Context, Result, ensure};
 
 use crate::compare::{Difference, ItemState};
-use crate::config::{ALL_TARGETS, Config};
+use crate::config::{ALL_TARGETS, Config, Kind};
 use crate::git;
 use crate::item::KeyPath;
 use crate::paths::Paths;
-use crate::report::{ItemReport, Outcome, Report, TargetPush, short_commit};
+use crate::report::{ItemReport, Outcome, Report, Review, TargetPush, short_commit};
 use crate::session::Session;
 use crate::{files, secret, setup};
 
@@ -17,10 +18,10 @@ pub(crate) fn run(paths: &Paths, to: &[String]) -> Result<Report> {
     let mut pushed = Vec::new();
     for target in chosen_targets(&config, to)? {
         let session = Session::open_target(paths, Some(&target))?;
-        let report = push(paths, &session)
+        let (report, review) = push(paths, &session)
             .with_context(|| format!("cannot push to the target `{target}`"))?;
         let stop = report.outcome != Outcome::Ok;
-        pushed.push((session, report));
+        pushed.push((session, report, review));
         if stop {
             break;
         }
@@ -49,9 +50,9 @@ fn chosen_targets(config: &Config, to: &[String]) -> Result<Vec<String>> {
     Ok(names)
 }
 
-fn push(paths: &Paths, session: &Session) -> Result<Report> {
+fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
     if session.remote_commit != session.base_commit {
-        return Ok(remote_ahead(session));
+        return Ok((remote_ahead(session), None));
     }
     let differences = session.differences();
     let pushed_items = differences
@@ -59,11 +60,8 @@ fn push(paths: &Paths, session: &Session) -> Result<Report> {
         .filter(|d| d.state != ItemState::Pinned)
         .count();
     if pushed_items == 0 {
-        return Ok(report(
-            session,
-            &differences,
-            "nothing to push: the local setup matches the remote snapshot".to_owned(),
-        ));
+        let summary = "nothing to push: the local setup matches the remote snapshot".to_owned();
+        return Ok((report(session, &differences, summary), None));
     }
     let outgoing = session.outgoing();
     let mut changes = setup::json_changes(&outgoing)?;
@@ -75,22 +73,44 @@ fn push(paths: &Paths, session: &Session) -> Result<Report> {
     let mut found = secret::scan(&outgoing);
     found.extend(files::token_like(&changes));
     if !found.is_empty() {
-        return Ok(secrets_found(session, &differences, &found));
+        return Ok((secrets_found(session, &differences, &found), None));
     }
-    let commit = session
-        .git
-        .commit(session.remote_commit.as_deref(), &changes, &message())?;
-    if let Err(err) = session.git.push(&session.target, &commit, &session.branch) {
-        if session.is_primary() {
-            session.git.fetch(&session.target)?;
-            let remote_now = session
-                .git
-                .resolve(&git::remote_ref(&session.target, &session.branch))?;
-            if remote_now != session.remote_commit {
-                return Ok(remote_ahead(session));
+    let parent = session.remote_commit.as_deref();
+    let commit = session.git.commit(parent, &changes, &message(session)?)?;
+    let gerrit = session.kind == Kind::Gerrit;
+    let destination = if gerrit {
+        format!("refs/for/{}", session.branch)
+    } else {
+        format!("refs/heads/{}", session.branch)
+    };
+    let remote_messages = match session.git.push(&session.target, &commit, &destination) {
+        Ok(messages) => messages,
+        Err(err) => {
+            if session.is_primary() && !gerrit {
+                session.git.fetch(&session.target)?;
+                let remote_now = session
+                    .git
+                    .resolve(&git::remote_ref(&session.target, &session.branch))?;
+                if remote_now != session.remote_commit {
+                    return Ok((remote_ahead(session), None));
+                }
             }
+            return Err(err);
         }
-        return Err(err);
+    };
+    if gerrit {
+        let review = Review {
+            change_url: change_url(&remote_messages),
+            commit: commit.clone(),
+        };
+        let summary = format!(
+            "sent {pushed_items} items for review as {}; the snapshot moves after the change merges",
+            review
+                .change_url
+                .as_deref()
+                .unwrap_or_else(|| short_commit(&commit))
+        );
+        return Ok((report(session, &differences, summary), Some(review)));
     }
     if session.is_primary() {
         session.git.set_base(&commit)?;
@@ -102,20 +122,29 @@ fn push(paths: &Paths, session: &Session) -> Result<Report> {
     let mut pushed = report(session, &differences, summary);
     pushed.base_commit = Some(commit.clone());
     pushed.remote_commit = Some(commit);
-    Ok(pushed)
+    Ok((pushed, None))
 }
 
-fn combine(pushed: Vec<(Session, Report)>) -> Report {
+fn change_url(remote_messages: &str) -> Option<String> {
+    remote_messages
+        .lines()
+        .filter_map(|line| line.strip_prefix("remote:"))
+        .flat_map(str::split_whitespace)
+        .find(|word| word.starts_with("https://") || word.starts_with("http://"))
+        .map(str::to_owned)
+}
+
+fn combine(pushed: Vec<(Session, Report, Option<Review>)>) -> Report {
     let summary = match pushed.as_slice() {
-        [(_, report)] => report.summary.clone(),
+        [(_, report, _)] => report.summary.clone(),
         _ => pushed
             .iter()
-            .map(|(session, report)| format!("{}: {}", session.target, report.summary))
+            .map(|(session, report, _)| format!("{}: {}", session.target, report.summary))
             .collect::<Vec<_>>()
             .join("; "),
     };
     let mut combined = Report::new("push", summary);
-    for (session, report) in pushed {
+    for (session, report, review) in pushed {
         combined.outcome = report.outcome;
         combined.secrets_found.extend(report.secrets_found);
         combined.undeclared_marketplaces = report.undeclared_marketplaces;
@@ -123,6 +152,7 @@ fn combine(pushed: Vec<(Session, Report)>) -> Report {
             target: session.target.clone(),
             outcome: report.outcome,
             commit: report.remote_commit.clone(),
+            review,
             items: Vec::new(),
         };
         if session.is_primary() {
@@ -173,8 +203,8 @@ fn remote_ahead(session: &Session) -> Report {
     }
 }
 
-fn message() -> String {
-    Command::new("hostname")
+fn message(session: &Session) -> Result<String> {
+    let subject = Command::new("hostname")
         .output()
         .ok()
         .filter(|output| output.status.success())
@@ -183,5 +213,35 @@ fn message() -> String {
         .map_or_else(
             || "cc-sync push".to_owned(),
             |host| format!("cc-sync push from {host}"),
-        )
+        );
+    if session.kind != Kind::Gerrit {
+        return Ok(subject);
+    }
+    let seed = format!(
+        "{subject}\n{}\n{:?}\n{}",
+        session.remote_commit.as_deref().unwrap_or_default(),
+        SystemTime::now(),
+        process::id()
+    );
+    Ok(format!(
+        "{subject}\n\nChange-Id: I{}",
+        session.git.hash_text(&seed)?
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_change_url_comes_from_the_remote_messages_of_gerrit() {
+        let messages = "remote: \nremote: Processing changes: refs: 1, new: 1, done\nremote: New Changes:        \n\
+                        remote:   https://gerrit.example/c/setup/+/42 cc-sync push from host [NEW]        \n";
+
+        assert_eq!(
+            change_url(messages).as_deref(),
+            Some("https://gerrit.example/c/setup/+/42")
+        );
+        assert_eq!(change_url("remote: Resolving deltas\n"), None);
+    }
 }

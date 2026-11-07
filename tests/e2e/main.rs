@@ -5,6 +5,8 @@ mod claude_json;
 #[cfg(test)]
 mod files;
 #[cfg(test)]
+mod gerrit;
+#[cfg(test)]
 mod init;
 #[cfg(test)]
 mod marketplaces;
