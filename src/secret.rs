@@ -54,9 +54,11 @@ pub(crate) fn is_placeholder(text: &str) -> bool {
 fn is_secret_key(key: &str) -> bool {
     let key = key.to_ascii_uppercase();
     key == "AUTHORIZATION"
-        || ["_KEY", "TOKEN", "SECRET", "PASSWORD", "HEADERS"]
-            .iter()
-            .any(|ending| key.ends_with(ending))
+        || [
+            "_KEY", "-KEY", "APIKEY", "TOKEN", "SECRET", "PASSWORD", "HEADERS",
+        ]
+        .iter()
+        .any(|ending| key.ends_with(ending))
 }
 
 pub(crate) fn local_view(
@@ -374,8 +376,11 @@ mod tests {
             "dbPassword",
             "headers",
             "OTEL_EXPORTER_OTLP_HEADERS",
+            "apiKey",
+            "api-key",
+            "X-API-KEY",
         ];
-        let plain = ["model", "apiKeyHelper", "KEYBOARD", "env"];
+        let plain = ["model", "apiKeyHelper", "KEYBOARD", "env", "monkey"];
 
         assert!(secret.iter().all(|key| is_secret_key(key)), "{secret:?}");
         assert!(!plain.iter().any(|key| is_secret_key(key)), "{plain:?}");

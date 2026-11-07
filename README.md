@@ -123,8 +123,8 @@ off.
 
 Push replaces each secret string with a placeholder such as
 `<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>`, so the repo never holds the value. A string is a secret
-when a key on its path, in any case, is `Authorization` or ends with `TOKEN`, `SECRET`, `PASSWORD`, `HEADERS`, or
-`_KEY`. The repo can declare more key paths; see
+when a key on its path, in any case, is `Authorization` or ends with `_KEY`, `-KEY`, `APIKEY`, `TOKEN`, `SECRET`,
+`PASSWORD`, or `HEADERS`. The repo can declare more key paths; see
 [`harness-sync.toml`](#harness-synctoml).
 
 Before it commits, push scans the outgoing snapshot, authored files included, for token-like strings outside a
