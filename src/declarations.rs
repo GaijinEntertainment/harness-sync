@@ -1,10 +1,8 @@
-use std::slice;
-
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
-use crate::git::Git;
 use crate::item::{ItemId, KeyPath};
+use crate::storage::Storage;
 
 pub(crate) const DECLARATIONS_FILE: &str = "harness-sync.toml";
 
@@ -26,13 +24,12 @@ struct DeclarationsFile {
 }
 
 impl Declarations {
-    pub(crate) fn load(git: &Git, commit: Option<&str>) -> Result<Self> {
+    pub(crate) fn load(storage: &dyn Storage, commit: Option<&str>) -> Result<Self> {
         let Some(commit) = commit else {
             return Ok(Self::default());
         };
-        let spec = format!("{commit}:{DECLARATIONS_FILE}");
-        let Some(bytes) = git
-            .read_files(slice::from_ref(&spec))?
+        let Some(bytes) = storage
+            .read_files(commit, &[DECLARATIONS_FILE])?
             .into_iter()
             .next()
             .flatten()

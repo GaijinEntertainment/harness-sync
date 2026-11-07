@@ -6,9 +6,9 @@ use std::path::Path;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::atomic;
 use crate::harness::Selection;
 use crate::item::ItemId;
+use crate::{atomic, storage};
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Config {
@@ -26,22 +26,12 @@ pub(crate) struct Config {
 pub(crate) struct Target {
     pub(crate) url: String,
     pub(crate) branch: String,
-    #[serde(default)]
-    pub(crate) kind: Kind,
+    #[serde(default = "default_kind")]
+    pub(crate) kind: String,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum Kind {
-    #[default]
-    Git,
-    Gerrit,
-}
-
-impl Kind {
-    pub(crate) const fn from_gerrit_flag(gerrit: bool) -> Self {
-        if gerrit { Self::Gerrit } else { Self::Git }
-    }
+fn default_kind() -> String {
+    storage::DEFAULT_KIND.to_owned()
 }
 
 pub(crate) const ALL_TARGETS: &str = "all";

@@ -1,16 +1,14 @@
-use std::slice;
-
 use anyhow::{Context, Result, bail};
 use clap::ValueEnum;
 use toml::{Table, Value};
 
-use crate::config::{Config, Kind};
+use crate::config::Config;
 use crate::declarations::{DECLARATIONS_FILE, Declarations};
-use crate::git::{self, BASE_REF, Git, TreeChange};
 use crate::item::KeyPath;
 use crate::paths::Paths;
-use crate::report::{DeclarationsReport, Report, Review, TargetPush, short_commit};
-use crate::{gerrit, setup};
+use crate::report::{DeclarationsReport, Outcome, Report, Review, TargetPush, short_commit};
+use crate::setup;
+use crate::storage::{self, FileChange, Publish, Storage};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum List {
@@ -30,10 +28,8 @@ impl List {
 }
 
 struct Repo {
-    git: Git,
+    storage: Box<dyn Storage>,
     target: String,
-    branch: String,
-    kind: Kind,
     primary: bool,
     head: Option<String>,
 }
@@ -42,22 +38,13 @@ impl Repo {
     fn open(paths: &Paths, target: Option<&str>) -> Result<Self> {
         let config = Config::load_connected(&paths.config_file())?;
         let target = target.unwrap_or(&config.primary).to_owned();
-        let (branch, kind) = config
-            .targets
-            .get(&target)
-            .map(|found| (found.branch.clone(), found.kind))
-            .with_context(|| {
-                format!("there is no target `{target}`; add it with `harness-sync target add`")
-            })?;
-        let git = Git::open(paths.repo_dir());
-        git.fetch(&target)?;
-        let head = git.resolve(&git::remote_ref(&target, &branch))?;
+        let storage = storage::open(paths, &config, &target)?;
+        storage.fetch()?;
+        let head = storage.head()?;
         Ok(Self {
             primary: target == config.primary,
-            git,
+            storage,
             target,
-            branch,
-            kind,
             head,
         })
     }
@@ -66,10 +53,9 @@ impl Repo {
         let Some(head) = &self.head else {
             return Ok(Table::new());
         };
-        let spec = format!("{head}:{DECLARATIONS_FILE}");
         let Some(bytes) = self
-            .git
-            .read_files(slice::from_ref(&spec))?
+            .storage
+            .read_files(head, &[DECLARATIONS_FILE])?
             .into_iter()
             .next()
             .flatten()
@@ -174,53 +160,62 @@ fn change(
     let content =
         toml::to_string(&table).with_context(|| format!("cannot serialize {DECLARATIONS_FILE}"))?;
     let parent = repo.head.as_deref();
-    let mut tree = setup::excluded_removals(&repo.git, parent, &Declarations::parse(&content)?)?;
-    tree.push(TreeChange::Write {
+    let mut tree = setup::excluded_removals(
+        repo.storage.as_ref(),
+        parent,
+        &Declarations::parse(&content)?,
+    )?;
+    tree.push(FileChange::Write {
         path: DECLARATIONS_FILE.to_owned(),
         content: content.into_bytes(),
         executable: false,
     });
     let subject = format!("update `{key}` in {DECLARATIONS_FILE}");
-    let message = gerrit::message(&repo.git, repo.kind, subject, parent)?;
-    let commit = repo.git.commit(parent, &tree, &message)?;
-    let remote_messages = repo.git.push(
-        &repo.target,
-        &commit,
-        &gerrit::destination(repo.kind, &repo.branch),
-    )?;
-    let mut report = Report {
+    let commit = repo.storage.commit(parent, &tree, &subject)?;
+    let (summary, pushed) = publish(&repo, key, commit)?;
+    Ok(Report {
         declarations: Some(listing),
-        ..Report::new("declarations", String::new())
-    };
+        pushes: vec![pushed],
+        ..Report::new("declarations", summary)
+    })
+}
+
+fn publish(repo: &Repo, key: &str, commit: String) -> Result<(String, TargetPush)> {
     let mut pushed = TargetPush {
         target: repo.target.clone(),
-        outcome: report.outcome,
+        outcome: Outcome::Ok,
         commit: Some(commit.clone()),
         review: None,
         items: Vec::new(),
     };
-    if repo.kind == Kind::Gerrit {
-        let change_url = gerrit::change_url(&remote_messages);
-        report.summary = format!(
-            "sent the change of `{key}` for review as {}",
-            change_url
-                .as_deref()
-                .unwrap_or_else(|| short_commit(&commit))
-        );
-        pushed.commit.clone_from(&repo.head);
-        pushed.review = Some(Review { commit, change_url });
-    } else {
-        if repo.primary && repo.git.resolve(BASE_REF)? == repo.head {
-            repo.git.set_base(&commit)?;
+    let summary = match repo.storage.publish(&commit)? {
+        Publish::SentForReview { change_url } => {
+            let summary = format!(
+                "sent the change of `{key}` for review as {}",
+                change_url
+                    .as_deref()
+                    .unwrap_or_else(|| short_commit(&commit))
+            );
+            pushed.commit.clone_from(&repo.head);
+            pushed.review = Some(Review { commit, change_url });
+            summary
         }
-        report.summary = format!(
-            "updated `{key}` of the target `{}` as commit {}",
-            repo.target,
-            short_commit(&commit)
-        );
-    }
-    report.pushes.push(pushed);
-    Ok(report)
+        Publish::Published => {
+            if repo.primary && repo.storage.base()? == repo.head {
+                repo.storage.set_base(&commit)?;
+            }
+            format!(
+                "updated `{key}` of the target `{}` as commit {}",
+                repo.target,
+                short_commit(&commit)
+            )
+        }
+        Publish::RemoteAhead => bail!(
+            "the target `{}` got a commit during the change: run the command again",
+            repo.target
+        ),
+    };
+    Ok((summary, pushed))
 }
 
 fn listing(repo: &Repo, table: &Table) -> Result<DeclarationsReport> {

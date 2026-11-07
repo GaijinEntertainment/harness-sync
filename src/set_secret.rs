@@ -5,7 +5,6 @@ use serde_json::Value;
 
 use crate::config::Config;
 use crate::declarations::Declarations;
-use crate::git::{self, Git};
 use crate::harness::keyed_file;
 use crate::item::KeyPath;
 use crate::json_edit::Edit;
@@ -13,7 +12,7 @@ use crate::output;
 use crate::paths::Paths;
 use crate::report::Report;
 use crate::setup::Backup;
-use crate::{secret, setup};
+use crate::{secret, setup, storage};
 
 pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report> {
     let mut missing = secret::load_missing(&paths.missing_secrets_file())?;
@@ -55,10 +54,9 @@ fn declared_secrets(paths: &Paths) -> Result<Vec<KeyPath>> {
     let Some(config) = Config::load(&paths.config_file())? else {
         return Ok(Vec::new());
     };
-    let git = Git::open(paths.repo_dir());
-    let remote_commit =
-        git.resolve(&git::remote_ref(&config.primary, &config.primary()?.branch))?;
-    Ok(Declarations::load(&git, remote_commit.as_deref())?.secrets)
+    let storage = storage::open(paths, &config, &config.primary)?;
+    let remote_commit = storage.head()?;
+    Ok(Declarations::load(storage.as_ref(), remote_commit.as_deref())?.secrets)
 }
 
 fn read_stdin() -> Result<String> {

@@ -7,11 +7,11 @@ use serde_json::{Value, json};
 
 use crate::atomic;
 use crate::declarations::DECLARATIONS_FILE;
-use crate::git::{Git, TreeChange};
 use crate::harness::{self, Selection, keyed_file};
 use crate::item::{ItemId, Items, KeyPath};
 use crate::paths::Paths;
 use crate::setup::Backup;
+use crate::storage::{FileChange, Storage};
 use crate::{references, secret};
 
 const SKIPPED_NAMES: [&str; 2] = [".DS_Store", "node_modules"];
@@ -50,9 +50,9 @@ pub(crate) fn catalog(
     Ok(files)
 }
 
-pub(crate) fn load_local(git: &Git, paths: &Paths, files: &[String]) -> Result<Items> {
+pub(crate) fn load_local(storage: &dyn Storage, paths: &Paths, files: &[String]) -> Result<Items> {
     let absolute: Vec<PathBuf> = files.iter().map(|file| paths.local(file)).collect();
-    let blobs = git.hash_files(&absolute)?;
+    let blobs = storage.content_ids(&absolute)?;
     Ok(files
         .iter()
         .zip(blobs)
@@ -107,15 +107,19 @@ fn is_regular_file(path: &Path) -> Result<bool> {
     }
 }
 
-pub(crate) fn load_snapshot(git: &Git, commit: &str, include: &[KeyPath]) -> Result<Items> {
-    Ok(git
+pub(crate) fn load_snapshot(
+    storage: &dyn Storage,
+    commit: &str,
+    include: &[KeyPath],
+) -> Result<Items> {
+    Ok(storage
         .list_files(commit)?
         .into_iter()
-        .filter(|entry| is_snapshot_file(&entry.path, include))
-        .map(|entry| {
+        .filter(|file| is_snapshot_file(&file.path, include))
+        .map(|file| {
             (
-                ItemId::whole_file(&entry.path),
-                value(&entry.blob, entry.executable),
+                ItemId::whole_file(&file.path),
+                value(&file.content_id, file.executable),
             )
         })
         .collect())
@@ -132,7 +136,7 @@ fn is_snapshot_file(file: &str, include: &[KeyPath]) -> bool {
         && file != DECLARATIONS_FILE
 }
 
-pub(crate) fn changes(outgoing: &Items, remote: &Items, paths: &Paths) -> Result<Vec<TreeChange>> {
+pub(crate) fn changes(outgoing: &Items, remote: &Items, paths: &Paths) -> Result<Vec<FileChange>> {
     let mut changes = Vec::new();
     for (id, value) in outgoing.iter().filter(|(id, _)| id.is_whole_file()) {
         if remote.get(id) == Some(value) {
@@ -140,7 +144,7 @@ pub(crate) fn changes(outgoing: &Items, remote: &Items, paths: &Paths) -> Result
         }
         let file = paths.local(&id.file);
         let content = fs::read(&file).with_context(|| format!("cannot read {}", file.display()))?;
-        changes.push(TreeChange::Write {
+        changes.push(FileChange::Write {
             path: id.file.clone(),
             content,
             executable: is_marked_executable(value),
@@ -150,18 +154,18 @@ pub(crate) fn changes(outgoing: &Items, remote: &Items, paths: &Paths) -> Result
         .keys()
         .filter(|id| id.is_whole_file() && !outgoing.contains_key(id))
     {
-        changes.push(TreeChange::Delete {
+        changes.push(FileChange::Delete {
             path: id.file.clone(),
         });
     }
     Ok(changes)
 }
 
-pub(crate) fn token_like(changes: &[TreeChange]) -> Vec<KeyPath> {
+pub(crate) fn token_like(changes: &[FileChange]) -> Vec<KeyPath> {
     changes
         .iter()
         .filter_map(|change| {
-            let TreeChange::Write { path, content, .. } = change else {
+            let FileChange::Write { path, content, .. } = change else {
                 return None;
             };
             let text = std::str::from_utf8(content).ok()?;
@@ -172,7 +176,7 @@ pub(crate) fn token_like(changes: &[TreeChange]) -> Vec<KeyPath> {
 
 pub(crate) fn write_local(
     paths: &Paths,
-    git: &Git,
+    storage: &dyn Storage,
     backup: &Backup,
     writes: &[(&ItemId, Option<&Value>)],
 ) -> Result<()> {
@@ -185,7 +189,7 @@ pub(crate) fn write_local(
         })
         .map(str::to_owned)
         .collect();
-    let mut contents = git.read_files(&blobs)?.into_iter();
+    let mut contents = storage.read_contents(&blobs)?.into_iter();
     for (id, value) in writes {
         let file = paths.local(&id.file);
         match fs::read(&file) {

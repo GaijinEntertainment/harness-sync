@@ -4,10 +4,10 @@ use std::io::{self, ErrorKind, IsTerminal, Write};
 use anyhow::Result;
 
 use crate::compare::ItemState;
-use crate::config::Kind;
 use crate::item::KeyPath;
 use crate::pull::Side;
 use crate::report::{ItemReport, Report};
+use crate::storage::DEFAULT_KIND;
 
 pub(crate) fn report(report: &Report, json: bool) -> Result<()> {
     let text = if json {
@@ -119,16 +119,16 @@ fn human(report: &Report) -> String {
         }
     }
     for target in &report.targets {
-        let gerrit = if target.kind == Kind::Gerrit {
-            "  (gerrit)"
+        let kind = if target.kind == DEFAULT_KIND {
+            String::new()
         } else {
-            ""
+            format!("  ({})", target.kind)
         };
         let primary = if target.primary { "  (primary)" } else { "" };
         // ignored: writing to a String cannot fail
         let _ = writeln!(
             text,
-            "  {}  {}  branch {}{gerrit}{primary}",
+            "  {}  {}  branch {}{kind}{primary}",
             target.name, target.url, target.branch
         );
     }

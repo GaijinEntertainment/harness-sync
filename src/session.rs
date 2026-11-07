@@ -1,25 +1,23 @@
 use std::collections::BTreeSet;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::compare::ThreeWay;
 use crate::compare::{Difference, ItemState};
-use crate::config::{Config, Kind};
+use crate::config::Config;
 use crate::declarations::Declarations;
-use crate::git::{self, BASE_REF, Git};
 use crate::harness::Selection;
 use crate::item::{ItemId, Items, KeyPath};
 use crate::paths::Paths;
 use crate::report::UndeclaredMarketplace;
+use crate::storage::{self, Storage};
 use crate::{files, home, secret, setup};
 
 #[derive(Debug)]
 pub(crate) struct Session {
     pub(crate) config: Config,
     pub(crate) target: String,
-    pub(crate) branch: String,
-    pub(crate) kind: Kind,
-    pub(crate) git: Git,
+    pub(crate) storage: Box<dyn Storage>,
     pub(crate) base_commit: Option<String>,
     pub(crate) remote_commit: Option<String>,
     pub(crate) pins: BTreeSet<ItemId>,
@@ -39,26 +37,19 @@ impl Session {
     pub(crate) fn open_target(paths: &Paths, target: Option<&str>) -> Result<Self> {
         let config = Config::load_connected(&paths.config_file())?;
         let target = target.unwrap_or(&config.primary).to_owned();
-        let (branch, kind) = config
-            .targets
-            .get(&target)
-            .map(|found| (found.branch.clone(), found.kind))
-            .with_context(|| {
-                format!("there is no target `{target}`; add it with `harness-sync target add`")
-            })?;
-        let git = Git::open(paths.repo_dir());
-        git.fetch(&target)?;
-        let remote_commit = git.resolve(&git::remote_ref(&target, &branch))?;
+        let storage = storage::open(paths, &config, &target)?;
+        storage.fetch()?;
+        let remote_commit = storage.head()?;
         let primary = target == config.primary;
         let base_commit = if primary {
-            git.resolve(BASE_REF)?
+            storage.base()?
         } else {
             remote_commit.clone()
         };
         let pins = config.pinned_items()?;
         let selection = config.selection()?;
-        let declarations = Declarations::load(&git, remote_commit.as_deref())?;
-        let local_setup = setup::load_local(paths, &git, &declarations, &selection)?;
+        let declarations = Declarations::load(storage.as_ref(), remote_commit.as_deref())?;
+        let local_setup = setup::load_local(paths, storage.as_ref(), &declarations, &selection)?;
         let mut undeclared_marketplaces = Vec::new();
         for check in selection
             .harnesses()
@@ -71,14 +62,23 @@ impl Session {
         for value in local.values_mut() {
             home::tokenize(value, &paths.home);
         }
-        let remote =
-            setup::load_snapshot(&git, remote_commit.as_deref(), &declarations, &selection)?;
+        let remote = setup::load_snapshot(
+            storage.as_ref(),
+            remote_commit.as_deref(),
+            &declarations,
+            &selection,
+        )?;
         let base = if primary {
             let without_base = Selection::new(&config.harnesses_without_base)?;
-            setup::load_snapshot(&git, base_commit.as_deref(), &declarations, &selection)?
-                .into_iter()
-                .filter(|(id, _)| !without_base.owns(&id.file))
-                .collect()
+            setup::load_snapshot(
+                storage.as_ref(),
+                base_commit.as_deref(),
+                &declarations,
+                &selection,
+            )?
+            .into_iter()
+            .filter(|(id, _)| !without_base.owns(&id.file))
+            .collect()
         } else {
             remote.clone()
         };
@@ -93,9 +93,7 @@ impl Session {
         Ok(Self {
             config,
             target,
-            branch,
-            kind,
-            git,
+            storage,
             base_commit,
             remote_commit,
             pins,

@@ -1,16 +1,16 @@
 use std::collections::BTreeSet;
 use std::process::Command;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 
 use crate::compare::{Difference, ItemState};
-use crate::config::{ALL_TARGETS, Config, Kind};
-use crate::git;
+use crate::config::{ALL_TARGETS, Config};
 use crate::item::KeyPath;
 use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, Review, TargetPush, short_commit};
 use crate::session::Session;
-use crate::{files, gerrit, secret, setup};
+use crate::storage::Publish;
+use crate::{files, secret, setup};
 
 pub(crate) fn run(paths: &Paths, to: &[String]) -> Result<Report> {
     let config = Config::load_connected(&paths.config_file())?;
@@ -78,42 +78,29 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
     if !found.is_empty() {
         return Ok((secrets_found(session, &differences, &found), None));
     }
-    let parent = session.remote_commit.as_deref();
-    let message = gerrit::message(&session.git, session.kind, subject(), parent)?;
-    let commit = session.git.commit(parent, &changes, &message)?;
-    let gerrit = session.kind == Kind::Gerrit;
-    let destination = gerrit::destination(session.kind, &session.branch);
-    let remote_messages = match session.git.push(&session.target, &commit, &destination) {
-        Ok(messages) => messages,
-        Err(err) => {
-            if session.is_primary() && !gerrit {
-                session.git.fetch(&session.target)?;
-                let remote_now = session
-                    .git
-                    .resolve(&git::remote_ref(&session.target, &session.branch))?;
-                if remote_now != session.remote_commit {
-                    return Ok((remote_ahead(session), None));
-                }
-            }
-            return Err(err);
+    let commit = session
+        .storage
+        .commit(session.remote_commit.as_deref(), &changes, &subject())?;
+    match session.storage.publish(&commit)? {
+        Publish::Published => {}
+        Publish::RemoteAhead if session.is_primary() => return Ok((remote_ahead(session), None)),
+        Publish::RemoteAhead => bail!(
+            "the target got a commit during the push: run `harness-sync push --to {}` again",
+            session.target
+        ),
+        Publish::SentForReview { change_url } => {
+            let summary = format!(
+                "sent {pushed_items} items for review as {}; the snapshot moves after the change merges",
+                change_url
+                    .as_deref()
+                    .unwrap_or_else(|| short_commit(&commit))
+            );
+            let review = Review { commit, change_url };
+            return Ok((report(session, &differences, summary), Some(review)));
         }
-    };
-    if gerrit {
-        let review = Review {
-            change_url: gerrit::change_url(&remote_messages),
-            commit: commit.clone(),
-        };
-        let summary = format!(
-            "sent {pushed_items} items for review as {}; the snapshot moves after the change merges",
-            review
-                .change_url
-                .as_deref()
-                .unwrap_or_else(|| short_commit(&commit))
-        );
-        return Ok((report(session, &differences, summary), Some(review)));
     }
     if session.is_primary() {
-        session.git.set_base(&commit)?;
+        session.storage.set_base(&commit)?;
     }
     let summary = format!(
         "pushed {pushed_items} items as commit {}",
