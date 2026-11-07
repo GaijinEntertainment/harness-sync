@@ -1,9 +1,8 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-use serde_json::Value;
-
-use crate::item::{ItemId, Items};
+use crate::harness;
+use crate::item::Items;
 use crate::report::MissingExecutable;
 
 const SHELL_WORDS: [&str; 14] = [
@@ -22,51 +21,13 @@ pub(crate) fn missing(setup: &Items, home: &Path) -> Vec<MissingExecutable> {
 }
 
 fn commands(setup: &Items) -> Vec<(String, String)> {
-    let mut commands = Vec::new();
-    for (id, value) in setup.iter().filter(|(id, _)| !id.is_whole_file()) {
-        match id.path.first().map(String::as_str) {
-            Some("statusLine" | "mcpServers") => {
-                push_command(&mut commands, id, &["command"], value);
-            }
-            Some("hooks") => hook_commands(&mut commands, id, value),
-            _ => {}
-        }
-    }
-    commands
-}
-
-fn hook_commands(commands: &mut Vec<(String, String)>, id: &ItemId, hooks: &Value) {
-    let matchers = hooks
-        .as_object()
-        .into_iter()
-        .flatten()
-        .flat_map(|(event, matchers)| {
-            let list = matchers.as_array().into_iter().flatten().enumerate();
-            list.map(move |(index, matcher)| (event, index, matcher))
-        });
-    for (event, index, matcher) in matchers {
-        let hooks = matcher.get("hooks").and_then(Value::as_array);
-        for (position, hook) in hooks.into_iter().flatten().enumerate() {
-            let path = [
-                event.as_str(),
-                &index.to_string(),
-                "hooks",
-                &position.to_string(),
-                "command",
-            ];
-            push_command(commands, id, &path, hook);
-        }
-    }
-}
-
-fn push_command(commands: &mut Vec<(String, String)>, id: &ItemId, path: &[&str], value: &Value) {
-    let Some(command) = value.get("command").and_then(Value::as_str) else {
-        return;
-    };
-    let mut key = id.key_path();
-    key.path
-        .extend(path.iter().map(|&segment| segment.to_owned()));
-    commands.push((key.to_string(), command.to_owned()));
+    setup
+        .iter()
+        .filter(|(id, _)| !id.is_whole_file())
+        .filter_map(|(id, value)| Some((harness::owner(&id.file)?, id, value)))
+        .flat_map(|(harness, id, value)| (harness.commands)(id, value))
+        .map(|(key, command)| (key.to_string(), command))
+        .collect()
 }
 
 fn executable(command: &str) -> Option<String> {

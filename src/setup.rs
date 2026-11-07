@@ -7,7 +7,8 @@ use anyhow::{Context, Result};
 
 use crate::declarations::Declarations;
 use crate::git::{Git, TreeChange};
-use crate::item::{Items, KEYED_FILES, KeyPath, KeyedFile, json_document, json_items};
+use crate::harness::{KeyedFile, keyed_files};
+use crate::item::{Items, KeyPath, json_document, json_items};
 use crate::json_edit::{self, Edit};
 use crate::paths::Paths;
 use crate::{atomic, files};
@@ -39,7 +40,7 @@ impl Backup {
 
 pub(crate) fn load_local(paths: &Paths, git: &Git, declarations: &Declarations) -> Result<Items> {
     let mut items = Items::new();
-    for keyed in &KEYED_FILES {
+    for keyed in keyed_files() {
         let path = paths.local(keyed.path);
         match fs::read(&path) {
             Ok(bytes) => items.extend(parse(keyed, &bytes, &path, &declarations.include)?),
@@ -68,12 +69,11 @@ fn load_whole_snapshot(git: &Git, commit: Option<&str>, include: &[KeyPath]) -> 
     let Some(commit) = commit else {
         return Ok(Items::new());
     };
-    let specs: Vec<String> = KEYED_FILES
-        .iter()
+    let specs: Vec<String> = keyed_files()
         .map(|keyed| format!("{commit}:{}", keyed.path))
         .collect();
     let mut items = files::load_snapshot(git, commit, include)?;
-    for ((keyed, spec), content) in KEYED_FILES.iter().zip(&specs).zip(git.read_files(&specs)?) {
+    for ((keyed, spec), content) in keyed_files().zip(&specs).zip(git.read_files(&specs)?) {
         if let Some(bytes) = content {
             items.extend(parse(keyed, &bytes, Path::new(spec), include)?);
         }
@@ -90,7 +90,7 @@ fn parse(keyed: &KeyedFile, bytes: &[u8], origin: &Path, include: &[KeyPath]) ->
 
 pub(crate) fn json_changes(items: &Items, remote: &Items) -> Result<Vec<TreeChange>> {
     let mut changes = Vec::new();
-    for keyed in &KEYED_FILES {
+    for keyed in keyed_files() {
         let holds_items = |items: &Items| items.keys().any(|id| id.file == keyed.path);
         if holds_items(items) {
             let mut content = serde_json::to_vec_pretty(&json_document(items, keyed.path))
