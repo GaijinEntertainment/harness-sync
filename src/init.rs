@@ -6,7 +6,7 @@ use anyhow::{Context, Result, ensure};
 use crate::config::{Config, Target};
 use crate::git::{self, BASE_REF, Git};
 use crate::paths::Paths;
-use crate::report::{Outcome, Report, short_commit};
+use crate::report::{Report, short_commit};
 
 const FIRST_TARGET: &str = "origin";
 
@@ -53,14 +53,8 @@ pub(crate) fn run(paths: &Paths, remote: &str, branch: &str) -> Result<Report> {
         },
     );
     Ok(Report {
-        command: "init",
-        outcome: Outcome::Ok,
         base_commit: git.resolve(BASE_REF)?,
         remote_commit,
-        items: Vec::new(),
-        secrets_found: Vec::new(),
-        missing_executables: Vec::new(),
-        undeclared_marketplaces: Vec::new(),
-        summary,
+        ..Report::new("init", summary)
     })
 }

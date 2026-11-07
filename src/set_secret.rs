@@ -10,7 +10,7 @@ use crate::item::{KeyPath, Source};
 use crate::json_edit::Edit;
 use crate::output;
 use crate::paths::Paths;
-use crate::report::{Outcome, Report};
+use crate::report::Report;
 use crate::setup::Backup;
 use crate::{secret, setup};
 
@@ -41,20 +41,13 @@ pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report>
     if missing.remove(key) {
         secret::save_missing(&paths.missing_secrets_file(), &missing)?;
     }
-    Ok(Report {
-        command: "secret set",
-        outcome: Outcome::Ok,
-        base_commit: None,
-        remote_commit: None,
-        items: Vec::new(),
-        secrets_found: Vec::new(),
-        missing_executables: Vec::new(),
-        undeclared_marketplaces: Vec::new(),
-        summary: format!(
+    Ok(Report::new(
+        "secret set",
+        format!(
             "set the secret {key} in {}",
             paths.json_file(file).display()
         ),
-    })
+    ))
 }
 
 fn declared_secrets(paths: &Paths) -> Result<Vec<KeyPath>> {

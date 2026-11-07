@@ -42,6 +42,22 @@ pub(crate) struct Report {
     pub(crate) summary: String,
 }
 
+impl Report {
+    pub(crate) const fn new(command: &'static str, summary: String) -> Self {
+        Self {
+            command,
+            outcome: Outcome::Ok,
+            base_commit: None,
+            remote_commit: None,
+            items: Vec::new(),
+            secrets_found: Vec::new(),
+            missing_executables: Vec::new(),
+            undeclared_marketplaces: Vec::new(),
+            summary,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct MissingExecutable {
     pub(crate) id: String,
