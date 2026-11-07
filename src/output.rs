@@ -92,6 +92,18 @@ fn human(report: &Report) -> String {
         // ignored: writing to a String cannot fail
         let _ = writeln!(text, "  {:<14}  {}", label(item.state), item.id);
     }
+    for push in &report.pushes {
+        for item in &push.items {
+            // ignored: writing to a String cannot fail
+            let _ = writeln!(
+                text,
+                "  {:<14}  {}  ({})",
+                label(item.state),
+                item.id,
+                push.target
+            );
+        }
+    }
     for target in &report.targets {
         let primary = if target.primary { "  (primary)" } else { "" };
         // ignored: writing to a String cannot fail

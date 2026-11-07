@@ -40,6 +40,8 @@ pub(crate) struct Report {
     pub(crate) undeclared_marketplaces: Vec<UndeclaredMarketplace>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) targets: Vec<TargetReport>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) pushes: Vec<TargetPush>,
     #[serde(skip)]
     pub(crate) summary: String,
 }
@@ -56,6 +58,7 @@ impl Report {
             missing_executables: Vec::new(),
             undeclared_marketplaces: Vec::new(),
             targets: Vec::new(),
+            pushes: Vec::new(),
             summary,
         }
     }
@@ -67,6 +70,15 @@ pub(crate) struct TargetReport {
     pub(crate) url: String,
     pub(crate) branch: String,
     pub(crate) primary: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct TargetPush {
+    pub(crate) target: String,
+    pub(crate) outcome: Outcome,
+    pub(crate) commit: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) items: Vec<ItemReport>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]

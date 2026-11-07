@@ -1,19 +1,57 @@
+use std::collections::BTreeSet;
 use std::process::Command;
 
-use anyhow::Result;
+use anyhow::{Context, Result, ensure};
 
 use crate::compare::{Difference, ItemState};
+use crate::config::{ALL_TARGETS, Config};
 use crate::git;
 use crate::item::KeyPath;
 use crate::paths::Paths;
-use crate::report::{ItemReport, Outcome, Report, short_commit};
+use crate::report::{ItemReport, Outcome, Report, TargetPush, short_commit};
 use crate::session::Session;
 use crate::{files, secret, setup};
 
-pub(crate) fn run(paths: &Paths) -> Result<Report> {
-    let session = Session::open(paths)?;
+pub(crate) fn run(paths: &Paths, to: &[String]) -> Result<Report> {
+    let config = Config::load_connected(&paths.config_file())?;
+    let mut pushed = Vec::new();
+    for target in chosen_targets(&config, to)? {
+        let session = Session::open_target(paths, Some(&target))?;
+        let report = push(paths, &session)
+            .with_context(|| format!("cannot push to the target `{target}`"))?;
+        let stop = report.outcome != Outcome::Ok;
+        pushed.push((session, report));
+        if stop {
+            break;
+        }
+    }
+    Ok(combine(pushed))
+}
+
+fn chosen_targets(config: &Config, to: &[String]) -> Result<Vec<String>> {
+    if to.is_empty() {
+        return Ok(vec![config.primary.clone()]);
+    }
+    let mut names: Vec<String> = if to.iter().any(|name| name == ALL_TARGETS) {
+        config.targets.keys().cloned().collect()
+    } else {
+        for name in to {
+            ensure!(
+                config.targets.contains_key(name),
+                "there is no target `{name}`; add it with `cc-sync target add`"
+            );
+        }
+        to.to_vec()
+    };
+    let mut seen = BTreeSet::new();
+    names.retain(|name| seen.insert(name.clone()));
+    names.sort_by_key(|name| *name != config.primary);
+    Ok(names)
+}
+
+fn push(paths: &Paths, session: &Session) -> Result<Report> {
     if session.remote_commit != session.base_commit {
-        return Ok(remote_ahead(&session));
+        return Ok(remote_ahead(session));
     }
     let differences = session.differences();
     let pushed_items = differences
@@ -22,7 +60,7 @@ pub(crate) fn run(paths: &Paths) -> Result<Report> {
         .count();
     if pushed_items == 0 {
         return Ok(report(
-            &session,
+            session,
             &differences,
             "nothing to push: the local setup matches the remote snapshot".to_owned(),
         ));
@@ -37,30 +75,66 @@ pub(crate) fn run(paths: &Paths) -> Result<Report> {
     let mut found = secret::scan(&outgoing);
     found.extend(files::token_like(&changes));
     if !found.is_empty() {
-        return Ok(secrets_found(&session, &differences, &found));
+        return Ok(secrets_found(session, &differences, &found));
     }
     let commit = session
         .git
         .commit(session.remote_commit.as_deref(), &changes, &message())?;
-    let target = &session.config.primary;
-    let branch = &session.config.primary()?.branch;
-    if let Err(err) = session.git.push(target, &commit, branch) {
-        session.git.fetch(target)?;
-        let remote_now = session.git.resolve(&git::remote_ref(target, branch))?;
-        if remote_now != session.remote_commit {
-            return Ok(remote_ahead(&session));
+    if let Err(err) = session.git.push(&session.target, &commit, &session.branch) {
+        if session.is_primary() {
+            session.git.fetch(&session.target)?;
+            let remote_now = session
+                .git
+                .resolve(&git::remote_ref(&session.target, &session.branch))?;
+            if remote_now != session.remote_commit {
+                return Ok(remote_ahead(session));
+            }
         }
         return Err(err);
     }
-    session.git.set_base(&commit)?;
+    if session.is_primary() {
+        session.git.set_base(&commit)?;
+    }
     let summary = format!(
         "pushed {pushed_items} items as commit {}",
         short_commit(&commit)
     );
-    let mut pushed = report(&session, &differences, summary);
+    let mut pushed = report(session, &differences, summary);
     pushed.base_commit = Some(commit.clone());
     pushed.remote_commit = Some(commit);
     Ok(pushed)
+}
+
+fn combine(pushed: Vec<(Session, Report)>) -> Report {
+    let summary = match pushed.as_slice() {
+        [(_, report)] => report.summary.clone(),
+        _ => pushed
+            .iter()
+            .map(|(session, report)| format!("{}: {}", session.target, report.summary))
+            .collect::<Vec<_>>()
+            .join("; "),
+    };
+    let mut combined = Report::new("push", summary);
+    for (session, report) in pushed {
+        combined.outcome = report.outcome;
+        combined.secrets_found.extend(report.secrets_found);
+        combined.undeclared_marketplaces = report.undeclared_marketplaces;
+        let mut target = TargetPush {
+            target: session.target.clone(),
+            outcome: report.outcome,
+            commit: report.remote_commit.clone(),
+            items: Vec::new(),
+        };
+        if session.is_primary() {
+            combined.base_commit = report.base_commit;
+            combined.remote_commit = report.remote_commit;
+            combined.items = report.items;
+        } else {
+            target.items = report.items;
+        }
+        combined.pushes.push(target);
+    }
+    combined
 }
 
 fn report(session: &Session, differences: &[Difference<'_>], summary: String) -> Report {

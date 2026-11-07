@@ -103,3 +103,108 @@ fn a_new_primary_has_no_base_commit_so_each_differing_item_is_a_conflict() {
         .unwrap();
     assert_eq!(model["state"], "conflict");
 }
+
+fn snapshot_settings(remote: &Remote) -> Value {
+    serde_json::from_str(&remote.show("main:settings.json")).unwrap()
+}
+
+fn connected_with_mirror(primary: &Remote, mirror: &Remote) -> Machine {
+    let machine = Machine::new();
+    machine.write_settings(&json!({"model": "opus"}));
+    assert_exit(&machine.cc_sync(&["init", &primary.url()]), 0);
+    assert_exit(&machine.cc_sync(&["push"]), 0);
+    assert_exit(
+        &machine.cc_sync(&["target", "add", "mirror", &mirror.url()]),
+        0,
+    );
+    machine
+}
+
+#[test]
+fn a_push_to_a_target_replaces_its_snapshot_and_keeps_the_base_commit() {
+    let primary = Remote::new();
+    let mirror = Remote::new();
+    let other = Machine::new();
+    other.write_settings(&json!({"model": "sonnet", "effortLevel": "high"}));
+    assert_exit(&other.cc_sync(&["init", &mirror.url()]), 0);
+    assert_exit(&other.cc_sync(&["push"]), 0);
+    let machine = connected_with_mirror(&primary, &mirror);
+    let primary_head = primary.head("main");
+
+    let (report, output) = machine.cc_sync_json(&["push", "--to", "mirror"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(snapshot_settings(&mirror), json!({"model": "opus"}));
+    assert_eq!(primary.head("main"), primary_head);
+    assert_eq!(report["pushes"][0]["target"], "mirror");
+    assert_eq!(
+        report["pushes"][0]["commit"].as_str(),
+        mirror.head("main").as_deref()
+    );
+    let replaced: Vec<&Value> = report["pushes"][0]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| &item["id"])
+        .collect();
+    assert_eq!(replaced, ["settings:/effortLevel", "settings:/model"]);
+    let (status, _) = machine.cc_sync_json(&["status"]);
+    assert_eq!(status["base_commit"].as_str(), primary_head.as_deref());
+}
+
+#[test]
+fn a_push_to_all_starts_with_the_primary_and_stops_when_the_primary_is_ahead() {
+    let primary = Remote::new();
+    let mirror = Remote::new();
+    let machine = connected_with_mirror(&primary, &mirror);
+    machine.write_settings(&json!({"model": "haiku"}));
+
+    let (report, output) = machine.cc_sync_json(&["push", "--to", "all"]);
+
+    assert_exit(&output, 0);
+    let order: Vec<&Value> = report["pushes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|push| &push["target"])
+        .collect();
+    assert_eq!(order, ["origin", "mirror"]);
+    assert_eq!(snapshot_settings(&primary), json!({"model": "haiku"}));
+    assert_eq!(snapshot_settings(&mirror), json!({"model": "haiku"}));
+
+    primary.commit_file("main", "notes.txt", "from another machine\n");
+    machine.write_settings(&json!({"model": "opus"}));
+    let mirror_head = mirror.head("main");
+
+    let ahead = machine.cc_sync(&["push", "--to", "all"]);
+
+    assert_exit(&ahead, 4);
+    assert_eq!(mirror.head("main"), mirror_head);
+}
+
+#[test]
+fn a_push_to_a_target_applies_the_exclude_list_of_that_target() {
+    let primary = Remote::new();
+    let mirror = Remote::new();
+    mirror.commit_file("main", "cc-sync.toml", "exclude = [\"settings:/model\"]\n");
+    let machine = connected_with_mirror(&primary, &mirror);
+    machine.write_settings(&json!({"model": "opus", "effortLevel": "high"}));
+
+    let output = machine.cc_sync(&["push", "--to", "mirror"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(snapshot_settings(&mirror), json!({"effortLevel": "high"}));
+    assert!(mirror.show("main:cc-sync.toml").contains("settings:/model"));
+}
+
+#[test]
+fn a_push_to_a_target_that_does_not_exist_fails() {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    assert_exit(&machine.cc_sync(&["init", &remote.url()]), 0);
+
+    let output = machine.cc_sync(&["push", "--to", "nowhere"]);
+
+    assert_exit(&output, 1);
+    assert!(text(&output.stderr).contains("there is no target `nowhere`"));
+}

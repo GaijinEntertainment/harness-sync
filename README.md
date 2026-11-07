@@ -79,6 +79,11 @@ cc-sync target remove mirror
 A new primary target has no base commit on this machine, so the first pull from it stops on each item that differs:
 settle them with `--prefer` or `--take`.
 
+`cc-sync push --to mirror` sends to that target, and `--to all` sends to every target, the primary first. A target
+that is not the primary gets this machine's setup as its new snapshot, without a conflict check, and with the
+`secrets`, `include`, and `exclude` of its own `cc-sync.toml`. So a target can hold a subset of the setup. Push stops
+at the first target that refuses, for example a primary with commits this machine has not pulled.
+
 ## Day to day
 
 `cc-sync status` lists the items that differ from the remote snapshot. `cc-sync pull` applies the changes of the other
@@ -193,6 +198,9 @@ A report looks like this:
 - `secrets_found` lists key paths when the scan blocks a push, `missing_executables` lists `{id, executable}` pairs
   after a pull, and `undeclared_marketplaces` lists `{name, declaration}` pairs from status and push for the
   marketplaces that do not sync. Each appears only when it holds entries.
+- `pushes` lists `{target, outcome, commit, items}` for each target that a push reached. The top-level `items`,
+  `base_commit`, and `remote_commit` belong to the primary target; the `items` of another target list what the push
+  replaced there. `targets` lists `{name, url, branch, primary}` for `target list`.
 - A file item shows its git blob id and executable bit in place of its content.
 
 Item ids name what `--take`, `pin`, and `unpin` act on:
