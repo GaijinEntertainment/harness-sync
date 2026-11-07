@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::config::Config;
 use crate::declarations::Declarations;
 use crate::git::{self, Git};
-use crate::item::{KeyPath, Source};
+use crate::item::{KeyPath, keyed_file};
 use crate::json_edit::Edit;
 use crate::output;
 use crate::paths::Paths;
@@ -26,13 +26,13 @@ pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report>
     } else {
         read_stdin()?
     };
-    let Source::Json(file) = key.source else {
-        bail!("`{key}` is not a key path in a JSON file");
-    };
+    if keyed_file(&key.file).is_none() || key.path.is_empty() {
+        bail!("`{key}` is not a key path in a JSON file that harness-sync splits into keys");
+    }
     setup::write_local(
         paths,
         &Backup::new(paths),
-        file,
+        &key.file,
         &[Edit {
             path: &key.path,
             value: Some(&Value::String(value)),
@@ -45,7 +45,7 @@ pub(crate) fn run(paths: &Paths, key: &KeyPath, prompts: bool) -> Result<Report>
         "secret set",
         format!(
             "set the secret {key} in {}",
-            paths.json_file(file).display()
+            paths.local(&key.file).display()
         ),
     ))
 }

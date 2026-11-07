@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::item::{ItemId, Items, Source};
+use crate::item::{ItemId, Items};
 use crate::report::MissingExecutable;
 
 const SHELL_WORDS: [&str; 14] = [
@@ -23,10 +23,7 @@ pub(crate) fn missing(setup: &Items, home: &Path) -> Vec<MissingExecutable> {
 
 fn commands(setup: &Items) -> Vec<(String, String)> {
     let mut commands = Vec::new();
-    for (id, value) in setup
-        .iter()
-        .filter(|(id, _)| matches!(id.source, Source::Json(_)))
-    {
+    for (id, value) in setup.iter().filter(|(id, _)| !id.is_whole_file()) {
         match id.path.first().map(String::as_str) {
             Some("statusLine" | "mcpServers") => {
                 push_command(&mut commands, id, &["command"], value);
@@ -148,11 +145,11 @@ mod tests {
             missing,
             [
                 MissingExecutable {
-                    id: "settings:/hooks/Stop/0/hooks/0/command".to_owned(),
+                    id: ".claude/settings.json:/hooks/Stop/0/hooks/0/command".to_owned(),
                     executable: "harness-sync-test-missing-tool".to_owned()
                 },
                 MissingExecutable {
-                    id: "settings:/hooks/Stop/0/hooks/1/command".to_owned(),
+                    id: ".claude/settings.json:/hooks/Stop/0/hooks/1/command".to_owned(),
                     executable: "~/.claude/hooks/absent.sh".to_owned()
                 },
             ]

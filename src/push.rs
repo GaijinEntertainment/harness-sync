@@ -63,14 +63,12 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
         return Ok((report(session, &differences, summary), None));
     }
     let outgoing = session.outgoing();
-    let mut changes = setup::json_changes(&outgoing)?;
-    changes.extend(files::changes(
-        &outgoing,
-        &session.three_way.remote,
-        &paths.claude_dir,
-    )?);
+    let remote = &session.three_way.remote;
+    let file_changes = files::changes(&outgoing, remote, paths)?;
     let mut found = secret::scan(&outgoing);
-    found.extend(files::token_like(&changes));
+    found.extend(files::token_like(&file_changes));
+    let mut changes = setup::json_changes(&outgoing, remote)?;
+    changes.extend(file_changes);
     if !found.is_empty() {
         return Ok((secrets_found(session, &differences, &found), None));
     }

@@ -110,7 +110,9 @@ impl Machine {
             return Vec::new();
         };
         entries
-            .map(|entry| fs::read_to_string(entry.unwrap().path().join("settings.json")).unwrap())
+            .map(|entry| {
+                fs::read_to_string(entry.unwrap().path().join(".claude/settings.json")).unwrap()
+            })
             .collect()
     }
 

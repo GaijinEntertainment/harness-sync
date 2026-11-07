@@ -100,13 +100,13 @@ fn a_new_primary_has_no_base_commit_so_each_differing_item_is_a_conflict() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|item| item["id"] == "settings:/model")
+        .find(|item| item["id"] == ".claude/settings.json:/model")
         .unwrap();
     assert_eq!(model["state"], "conflict");
 }
 
 fn snapshot_settings(remote: &Remote) -> Value {
-    serde_json::from_str(&remote.show("main:settings.json")).unwrap()
+    serde_json::from_str(&remote.show("main:.claude/settings.json")).unwrap()
 }
 
 fn connected_with_mirror(primary: &Remote, mirror: &Remote) -> Machine {
@@ -148,7 +148,13 @@ fn a_push_to_a_target_replaces_its_snapshot_and_keeps_the_base_commit() {
         .iter()
         .map(|item| &item["id"])
         .collect();
-    assert_eq!(replaced, ["settings:/effortLevel", "settings:/model"]);
+    assert_eq!(
+        replaced,
+        [
+            ".claude/settings.json:/effortLevel",
+            ".claude/settings.json:/model"
+        ]
+    );
     let (status, _) = machine.harness_sync_json(&["status"]);
     assert_eq!(status["base_commit"].as_str(), primary_head.as_deref());
 }
@@ -190,7 +196,7 @@ fn a_push_to_a_target_applies_the_exclude_list_of_that_target() {
     mirror.commit_file(
         "main",
         "harness-sync.toml",
-        "exclude = [\"settings:/model\"]\n",
+        "exclude = [\".claude/settings.json:/model\"]\n",
     );
     let machine = connected_with_mirror(&primary, &mirror);
     machine.write_settings(&json!({"model": "opus", "effortLevel": "high"}));
@@ -202,7 +208,7 @@ fn a_push_to_a_target_applies_the_exclude_list_of_that_target() {
     assert!(
         mirror
             .show("main:harness-sync.toml")
-            .contains("settings:/model")
+            .contains(".claude/settings.json:/model")
     );
 }
 

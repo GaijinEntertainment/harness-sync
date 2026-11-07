@@ -1,9 +1,12 @@
 use std::collections::BTreeMap;
 use std::fmt;
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Result, bail, ensure};
 use serde_json::{Map, Value};
+
+pub(crate) const CLAUDE_SETTINGS: &str = ".claude/settings.json";
 
 const SPLIT_SETTINGS_KEYS: [&str; 6] = [
     "env",
@@ -46,145 +49,134 @@ const CLAUDE_KEYS: [&str; 29] = [
     "companionMuted",
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum JsonFile {
-    Settings,
-    Claude,
+#[derive(Debug)]
+pub(crate) struct KeyedFile {
+    pub(crate) path: &'static str,
+    keys: Keys,
+    split: &'static [&'static str],
 }
 
-pub(crate) const JSON_SOURCES: [JsonFile; 2] = [JsonFile::Settings, JsonFile::Claude];
-
-impl JsonFile {
-    const fn name(self) -> &'static str {
-        match self {
-            Self::Settings => "settings",
-            Self::Claude => "claude",
-        }
-    }
-
-    pub(crate) const fn snapshot_file(self) -> &'static str {
-        match self {
-            Self::Settings => "settings.json",
-            Self::Claude => "claude.json",
-        }
-    }
-
-    const fn split_keys(self) -> &'static [&'static str] {
-        match self {
-            Self::Settings => &SPLIT_SETTINGS_KEYS,
-            Self::Claude => &["mcpServers"],
-        }
-    }
-
-    fn splits(self, key: &str) -> bool {
-        self.split_keys().contains(&key)
-    }
-
-    fn holds(self, key: &str) -> bool {
-        match self {
-            Self::Settings => true,
-            Self::Claude => CLAUDE_KEYS.contains(&key),
-        }
-    }
+#[derive(Debug)]
+enum Keys {
+    All,
+    Only(&'static [&'static str]),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Source {
-    Json(JsonFile),
-    File,
+pub(crate) static KEYED_FILES: [KeyedFile; 2] = [
+    KeyedFile {
+        path: CLAUDE_SETTINGS,
+        keys: Keys::All,
+        split: &SPLIT_SETTINGS_KEYS,
+    },
+    KeyedFile {
+        path: ".claude.json",
+        keys: Keys::Only(&CLAUDE_KEYS),
+        split: &["mcpServers"],
+    },
+];
+
+pub(crate) fn keyed_file(path: &str) -> Option<&'static KeyedFile> {
+    KEYED_FILES.iter().find(|file| file.path == path)
 }
 
-impl Source {
-    const fn name(self) -> &'static str {
-        match self {
-            Self::Json(file) => file.name(),
-            Self::File => "file",
+impl KeyedFile {
+    fn holds(&self, key: &str) -> bool {
+        match self.keys {
+            Keys::All => true,
+            Keys::Only(keys) => keys.contains(&key),
         }
     }
 
-    fn from_name(name: &str) -> Option<Self> {
-        JSON_SOURCES
-            .into_iter()
-            .map(Self::Json)
-            .find(|source| source.name() == name)
+    fn splits(&self, key: &str) -> bool {
+        self.split.contains(&key)
     }
 
-    fn item_length(self, path: &[String]) -> usize {
-        match self {
-            Self::Json(file) => {
-                if path.first().is_some_and(|key| file.splits(key)) {
-                    2
-                } else {
-                    1
-                }
-            }
-            Self::File => path.len(),
+    fn item_length(&self, path: &[String]) -> usize {
+        if path.first().is_some_and(|key| self.splits(key)) {
+            2
+        } else {
+            1
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ItemId {
-    pub(crate) source: Source,
+    pub(crate) file: String,
     pub(crate) path: Vec<String>,
 }
 
 pub(crate) type Items = BTreeMap<ItemId, Value>;
 
 impl ItemId {
-    fn new(source: Source, path: &[&str]) -> Self {
+    pub(crate) fn whole_file(file: &str) -> Self {
         Self {
-            source,
+            file: file.to_owned(),
+            path: Vec::new(),
+        }
+    }
+
+    pub(crate) fn key(file: &str, path: &[&str]) -> Self {
+        Self {
+            file: file.to_owned(),
             path: path.iter().map(|&segment| segment.to_owned()).collect(),
         }
     }
 
-    #[cfg(test)]
-    fn settings(path: &[&str]) -> Self {
-        Self::new(Source::Json(JsonFile::Settings), path)
+    pub(crate) const fn is_whole_file(&self) -> bool {
+        self.path.is_empty()
+    }
+
+    pub(crate) fn key_path(&self) -> KeyPath {
+        KeyPath {
+            file: self.file.clone(),
+            path: self.path.clone(),
+        }
+    }
+
+    pub(crate) fn names_an_item(&self) -> bool {
+        keyed_file(&self.file).map_or(self.path.is_empty(), |keyed| {
+            !self.path.is_empty() && self.path.len() == keyed.item_length(&self.path)
+        })
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct KeyPath {
-    pub(crate) source: Source,
+    pub(crate) file: String,
     pub(crate) path: Vec<String>,
-}
-
-impl ItemId {
-    pub(crate) fn key_path(&self) -> KeyPath {
-        KeyPath {
-            source: self.source,
-            path: self.path.clone(),
-        }
-    }
-}
-
-impl ItemId {
-    pub(crate) fn names_an_item(&self) -> bool {
-        !self.path.is_empty() && self.path.len() == self.source.item_length(&self.path)
-    }
 }
 
 impl KeyPath {
     pub(crate) fn item(&self) -> ItemId {
-        let length = self.source.item_length(&self.path);
+        let length = keyed_file(&self.file).map_or(0, |keyed| keyed.item_length(&self.path));
         ItemId {
-            source: self.source,
+            file: self.file.clone(),
             path: self.path.iter().take(length).cloned().collect(),
+        }
+    }
+
+    pub(crate) fn covers(&self, file: &str, path: &[String]) -> bool {
+        if self.path.is_empty() {
+            file == self.file
+                || file
+                    .strip_prefix(self.file.as_str())
+                    .is_some_and(|rest| rest.starts_with('/'))
+        } else {
+            file == self.file && path.starts_with(&self.path)
         }
     }
 }
 
 impl fmt::Display for ItemId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write_pointer(f, self.source, &self.path)
+        write_id(f, &self.file, &self.path)
     }
 }
 
 impl fmt::Display for KeyPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write_pointer(f, self.source, &self.path)
+        write_id(f, &self.file, &self.path)
     }
 }
 
@@ -192,8 +184,8 @@ impl FromStr for ItemId {
     type Err = anyhow::Error;
 
     fn from_str(text: &str) -> Result<Self> {
-        let (source, path) = parse_pointer(text)?;
-        Ok(Self { source, path })
+        let (file, path) = parse_id(text)?;
+        Ok(Self { file, path })
     }
 }
 
@@ -201,15 +193,15 @@ impl FromStr for KeyPath {
     type Err = anyhow::Error;
 
     fn from_str(text: &str) -> Result<Self> {
-        let (source, path) = parse_pointer(text)?;
-        Ok(Self { source, path })
+        let (file, path) = parse_id(text)?;
+        Ok(Self { file, path })
     }
 }
 
-fn write_pointer(f: &mut fmt::Formatter<'_>, source: Source, path: &[String]) -> fmt::Result {
-    write!(f, "{}:", source.name())?;
-    if source == Source::File {
-        return write!(f, "{}", path.join("/"));
+fn write_id(f: &mut fmt::Formatter<'_>, file: &str, path: &[String]) -> fmt::Result {
+    f.write_str(file)?;
+    if !path.is_empty() {
+        f.write_str(":")?;
     }
     for segment in path {
         write!(f, "/{}", segment.replace('~', "~0").replace('/', "~1"))?;
@@ -217,40 +209,44 @@ fn write_pointer(f: &mut fmt::Formatter<'_>, source: Source, path: &[String]) ->
     Ok(())
 }
 
-fn parse_pointer(text: &str) -> Result<(Source, Vec<String>)> {
-    if let Some(relative) = text.strip_prefix("file:") {
-        let path: Vec<String> = relative.split('/').map(str::to_owned).collect();
-        ensure!(
-            path.iter()
-                .all(|segment| !matches!(segment.as_str(), "" | "." | "..")),
-            "`{text}` is not a file item id; a file item id looks like `file:rules/NAME.md`"
-        );
-        return Ok((Source::File, path));
-    }
-    let Some((source, pointer)) = text
-        .split_once(':')
-        .and_then(|(name, pointer)| Some((Source::from_name(name)?, pointer)))
-    else {
-        bail!("`{text}` is not an item id; an item id looks like `settings:/env/NAME`");
-    };
-    let Some(pointer) = pointer.strip_prefix('/') else {
-        bail!("the item id `{text}` needs a JSON pointer that starts with `/`");
-    };
-    let path = pointer
-        .split('/')
-        .map(|segment| segment.replace("~1", "/").replace("~0", "~"))
-        .collect();
-    Ok((source, path))
+fn parse_id(text: &str) -> Result<(String, Vec<String>)> {
+    let pointer_start = text.match_indices(":/").map(|(at, _)| at).find(|&at| {
+        Path::new(&text[..at])
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
+    });
+    let (file, pointer) =
+        pointer_start.map_or((text, None), |at| (&text[..at], Some(&text[at + 2..])));
+    ensure!(
+        is_home_path(file),
+        "`{text}` is not an item id; an item id is a path relative to the home directory, such as \
+         `.claude/rules/NAME.md`, and for a JSON key the path, `:`, and a JSON pointer, such as \
+         `.claude/settings.json:/env/NAME`"
+    );
+    let path = pointer.map_or_else(Vec::new, |pointer| {
+        pointer
+            .split('/')
+            .map(|segment| segment.replace("~1", "/").replace("~0", "~"))
+            .collect()
+    });
+    Ok((file.to_owned(), path))
 }
 
-pub(crate) fn json_items(file: JsonFile, document: Value, include: &[KeyPath]) -> Result<Items> {
-    let source = Source::Json(file);
+fn is_home_path(file: &str) -> bool {
+    !file.contains('\\')
+        && !file.starts_with('~')
+        && file
+            .split('/')
+            .all(|segment| !matches!(segment, "" | "." | ".."))
+}
+
+pub(crate) fn json_items(file: &KeyedFile, document: Value, include: &[KeyPath]) -> Result<Items> {
     let Value::Object(keys) = document else {
         bail!("the document does not hold a JSON object");
     };
     let included = |key: &str| {
         include.iter().any(|path| {
-            path.source == source && path.path.first().is_some_and(|first| first == key)
+            path.file == file.path && path.path.first().is_some_and(|first| first == key)
         })
     };
     let mut items = Items::new();
@@ -261,11 +257,11 @@ pub(crate) fn json_items(file: JsonFile, document: Value, include: &[KeyPath]) -
         match value {
             Value::Object(entries) if file.splits(&key) => {
                 for (name, entry) in entries {
-                    items.insert(ItemId::new(source, &[&key, &name]), entry);
+                    items.insert(ItemId::key(file.path, &[&key, &name]), entry);
                 }
             }
             value => {
-                items.insert(ItemId::new(source, &[&key]), value);
+                items.insert(ItemId::key(file.path, &[&key]), value);
             }
         }
     }
@@ -274,15 +270,12 @@ pub(crate) fn json_items(file: JsonFile, document: Value, include: &[KeyPath]) -
 
 #[cfg(test)]
 pub(crate) fn settings_items(document: Value) -> Result<Items> {
-    json_items(JsonFile::Settings, document, &[])
+    json_items(&KEYED_FILES[0], document, &[])
 }
 
-pub(crate) fn json_document(items: &Items, file: JsonFile) -> Value {
+pub(crate) fn json_document(items: &Items, file: &str) -> Value {
     let mut document = Map::new();
-    for (id, value) in items
-        .iter()
-        .filter(|(id, _)| id.source == Source::Json(file))
-    {
+    for (id, value) in items.iter().filter(|(id, _)| id.file == file) {
         insert_at(&mut document, &id.path, value.clone());
     }
     Value::Object(document)
@@ -317,7 +310,7 @@ mod tests {
     #[test]
     fn claude_json_gives_the_catalog_and_included_keys_and_one_item_per_mcp_server() {
         let items = json_items(
-            JsonFile::Claude,
+            &KEYED_FILES[1],
             json!({
                 "numStartups": 12,
                 "oauthAccount": {"emailAddress": "me@example.com"},
@@ -326,7 +319,7 @@ mod tests {
                 "theme": "dark",
                 "autoUpdates": false
             }),
-            &["claude:/numStartups".parse().unwrap()],
+            &[".claude.json:/numStartups".parse().unwrap()],
         )
         .unwrap();
 
@@ -334,10 +327,10 @@ mod tests {
         assert_eq!(
             ids,
             [
-                "claude:/mcpServers/kartta",
-                "claude:/mcpServers/web",
-                "claude:/numStartups",
-                "claude:/theme"
+                ".claude.json:/mcpServers/kartta",
+                ".claude.json:/mcpServers/web",
+                ".claude.json:/numStartups",
+                ".claude.json:/theme"
             ]
         );
     }
@@ -355,14 +348,14 @@ mod tests {
         assert_eq!(
             ids,
             [
-                "settings:/effortLevel",
-                "settings:/env/A",
-                "settings:/env/B",
-                "settings:/permissions"
+                ".claude/settings.json:/effortLevel",
+                ".claude/settings.json:/env/A",
+                ".claude/settings.json:/env/B",
+                ".claude/settings.json:/permissions"
             ]
         );
         assert_eq!(
-            items[&ItemId::settings(&["permissions"])],
+            items[&ItemId::key(CLAUDE_SETTINGS, &["permissions"])],
             json!({"deny": ["Bash"]})
         );
     }
@@ -371,7 +364,10 @@ mod tests {
     fn a_split_key_without_an_object_is_one_item() {
         let items = settings_items(json!({"env": "broken"})).unwrap();
 
-        assert_eq!(items[&ItemId::settings(&["env"])], json!("broken"));
+        assert_eq!(
+            items[&ItemId::key(CLAUDE_SETTINGS, &["env"])],
+            json!("broken")
+        );
     }
 
     #[test]
@@ -385,7 +381,7 @@ mod tests {
             json!({"env": {"A": "1"}, "permissions": {"deny": ["Bash"]}, "model": "opus"});
         let items = settings_items(document.clone()).unwrap();
 
-        let rebuilt = json_document(&items, JsonFile::Settings);
+        let rebuilt = json_document(&items, CLAUDE_SETTINGS);
 
         assert_eq!(rebuilt, document);
         assert_eq!(settings_items(rebuilt).unwrap(), items);
@@ -393,43 +389,86 @@ mod tests {
 
     #[test]
     fn item_ids_escape_and_parse_json_pointer_segments() {
-        let id = ItemId::settings(&["skillOverrides", "plugin:skill/a~b"]);
+        let id = ItemId::key(CLAUDE_SETTINGS, &["skillOverrides", "plugin:skill/a~b"]);
 
         let text = id.to_string();
 
-        assert_eq!(text, "settings:/skillOverrides/plugin:skill~1a~0b");
+        assert_eq!(
+            text,
+            ".claude/settings.json:/skillOverrides/plugin:skill~1a~0b"
+        );
         assert_eq!(text.parse::<ItemId>().unwrap(), id);
     }
 
     #[test]
     fn a_key_path_belongs_to_the_item_that_holds_it() {
-        let in_split_key: KeyPath = "settings:/pluginConfigs/p/options/apiToken"
+        let in_split_key: KeyPath = ".claude/settings.json:/pluginConfigs/p/options/apiToken"
             .parse()
             .unwrap();
-        let in_plain_key: KeyPath = "settings:/statusLine/command".parse().unwrap();
+        let in_plain_key: KeyPath = ".claude/settings.json:/statusLine/command".parse().unwrap();
+        let in_a_file: KeyPath = ".claude/keybindings.json:/bindings".parse().unwrap();
 
         assert_eq!(
             in_split_key.item(),
-            ItemId::settings(&["pluginConfigs", "p"])
+            ItemId::key(CLAUDE_SETTINGS, &["pluginConfigs", "p"])
         );
-        assert_eq!(in_plain_key.item(), ItemId::settings(&["statusLine"]));
+        assert_eq!(
+            in_plain_key.item(),
+            ItemId::key(CLAUDE_SETTINGS, &["statusLine"])
+        );
+        assert_eq!(
+            in_a_file.item(),
+            ItemId::whole_file(".claude/keybindings.json")
+        );
     }
 
     #[test]
-    fn a_file_item_id_is_its_relative_path() {
-        let id: ItemId = "file:skills/review/SKILL.md".parse().unwrap();
+    fn a_file_item_id_is_its_home_relative_path() {
+        let id: ItemId = ".claude/skills/review/SKILL.md".parse().unwrap();
 
-        assert_eq!(id.source, Source::File);
-        assert_eq!(id.path, ["skills", "review", "SKILL.md"]);
-        assert_eq!(id.to_string(), "file:skills/review/SKILL.md");
+        assert_eq!(id, ItemId::whole_file(".claude/skills/review/SKILL.md"));
+        assert_eq!(id.to_string(), ".claude/skills/review/SKILL.md");
         assert!(id.names_an_item());
-        assert!("file:../x".parse::<ItemId>().is_err());
-        assert!("file:a//b".parse::<ItemId>().is_err());
+        assert!(
+            ".claude/skills/a:/b.md"
+                .parse::<ItemId>()
+                .unwrap()
+                .is_whole_file()
+        );
+    }
+
+    #[test]
+    fn only_an_item_of_its_file_kind_names_an_item() {
+        let names = |text: &str| text.parse::<ItemId>().unwrap().names_an_item();
+
+        assert!(names(".claude/settings.json:/env/A"));
+        assert!(!names(".claude/settings.json:/env"));
+        assert!(!names(".claude/settings.json"));
+        assert!(!names(".claude/keybindings.json:/x"));
+    }
+
+    #[test]
+    fn a_location_covers_its_keys_and_the_files_below_it() {
+        let dir: KeyPath = ".claude/skills/review".parse().unwrap();
+        let key: KeyPath = ".claude/settings.json:/env".parse().unwrap();
+
+        assert!(dir.covers(".claude/skills/review/SKILL.md", &[]));
+        assert!(!dir.covers(".claude/skills/reviewer/SKILL.md", &[]));
+        assert!(key.covers(CLAUDE_SETTINGS, &["env".to_owned(), "A".to_owned()]));
+        assert!(!key.covers(CLAUDE_SETTINGS, &["envy".to_owned()]));
     }
 
     #[test]
     fn a_text_that_is_not_an_item_id_is_rejected() {
-        assert!("files:/x".parse::<ItemId>().is_err());
-        assert!("settings:env".parse::<ItemId>().is_err());
+        for text in [
+            "",
+            "~/.claude/settings.json",
+            "/etc/passwd",
+            ".claude/../x",
+            ".claude//x",
+            ".claude\\x",
+        ] {
+            assert!(text.parse::<ItemId>().is_err(), "{text}");
+        }
     }
 }

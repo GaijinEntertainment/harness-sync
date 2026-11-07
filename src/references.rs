@@ -4,14 +4,14 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::item::Items;
+use crate::item::{Items, keyed_file};
 use crate::paths::Paths;
 
 const NEVER_REFERENCED: [&str; 4] = [
-    "plugins/",
-    "projects/",
-    "skills/synced/",
-    ".credentials.json",
+    ".claude/plugins/",
+    ".claude/projects/",
+    ".claude/skills/synced/",
+    ".claude/.credentials.json",
 ];
 const WORD_SEPARATORS: [char; 11] = [' ', '\t', '\n', '"', '\'', '=', '(', ')', ';', '&', '|'];
 
@@ -34,7 +34,7 @@ pub(crate) fn find(paths: &Paths, json: &Items, catalog: &[String]) -> Vec<Strin
         if !scanned.insert(file.clone()) {
             continue;
         }
-        let path = paths.claude_dir.join(&file);
+        let path = paths.local(&file);
         let Ok(text) = fs::read_to_string(&path) else {
             continue;
         };
@@ -91,24 +91,17 @@ fn resolve(paths: &Paths, raw: &str, base: Option<&Path>) -> Option<String> {
         None if Path::new(raw).is_absolute() => PathBuf::from(raw),
         None => base?.join(raw),
     };
-    let relative = normalize(&path)?
-        .strip_prefix(&paths.claude_dir)
-        .ok()?
-        .to_path_buf();
-    let parts: Vec<&str> = relative
-        .components()
-        .map(|component| match component {
-            Component::Normal(part) => part.to_str(),
-            _ => None,
-        })
-        .collect::<Option<_>>()?;
-    let relative = parts.join("/");
-    let allowed = !relative.is_empty()
+    let normal = normalize(&path)?;
+    if !normal.starts_with(&paths.claude_dir) {
+        return None;
+    }
+    let file = paths.home_path(&normal)?;
+    let allowed = keyed_file(&file).is_none()
         && !NEVER_REFERENCED
             .iter()
-            .any(|prefix| relative.starts_with(prefix));
+            .any(|prefix| file.starts_with(prefix));
     (allowed && fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file()))
-        .then_some(relative)
+        .then_some(file)
 }
 
 fn normalize(path: &Path) -> Option<PathBuf> {
@@ -165,11 +158,11 @@ mod tests {
 
         assert_eq!(
             resolve(&paths, "~/.claude/hooks/x.sh", None).as_deref(),
-            Some("hooks/x.sh")
+            Some(".claude/hooks/x.sh")
         );
         assert_eq!(
             resolve(&paths, "../hooks/x.sh", Some(&claude_dir.join("rules"))).as_deref(),
-            Some("hooks/x.sh")
+            Some(".claude/hooks/x.sh")
         );
         assert_eq!(
             resolve(&paths, "~/.claude/plugins/cache/p/run.sh", None),
