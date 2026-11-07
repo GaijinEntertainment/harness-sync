@@ -8,6 +8,10 @@ The design and the decisions behind it are in [`design-docs/`](design-docs/).
 
 ## What syncs
 
+Each harness syncs on its own; harness-sync never moves a value from one harness to another.
+
+### Claude Code
+
 - `~/.claude/settings.json`, one item per top-level key. The entries of `env`, `enabledPlugins`,
   `extraKnownMarketplaces`, `pluginConfigs`, `skillOverrides`, and `modelSettings` are one item each.
 - From `~/.claude.json`: each MCP server in `mcpServers`, the Global config keys of the Claude Code settings reference,
@@ -26,6 +30,23 @@ Everything else stays on the machine: the rest of `~/.claude.json` (counters, ca
 records), credentials, history, sessions, auto-memory, `skills/synced/`, the removed skills in `skills/.trash/`, the
 plugin install records, the plugin cache, and every `node_modules` directory. When `CLAUDE_CONFIG_DIR` is set,
 harness-sync reads and writes the Claude Code files in that directory, as Claude Code does.
+
+### pi
+
+- `~/.pi/agent/settings.json`, one item per top-level key, except the state keys `lastChangelogVersion`, `trackingId`,
+  and `deviceId`. The package declarations sync as the `packages`, `extensions`, `skills`, `prompts`, and `themes`
+  keys; pi installs the declared packages itself.
+- `models.json`, one item per provider in `providers`, and `mcp.json`, one item per server in `mcpServers`.
+- `keybindings.json`, the context files `AGENTS.override.md`, `AGENTS.md`, and `CLAUDE.md`, `SYSTEM.md`,
+  `APPEND_SYSTEM.md`, and the files in `extensions/`, `skills/`, `prompts/`, and `themes/`.
+
+The credentials in `auth.json`, `mcp-auth.json`, and `models-store.json`, the sessions, the npm tree, and the caches
+stay on the machine. When `PI_CODING_AGENT_DIR` is set, harness-sync reads and writes the pi files in that directory.
+
+### Other files
+
+A file or directory under the home directory that no harness owns, such as `~/.agents/skills/`, syncs when the repo's
+`include` list names it; see [`harness-sync.toml`](#harness-synctoml).
 
 ## Install
 

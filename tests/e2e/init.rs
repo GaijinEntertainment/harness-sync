@@ -54,7 +54,10 @@ fn init_syncs_each_harness_whose_directory_exists() {
     assert_exit(&output, 0);
     assert_eq!(
         report["harnesses"],
-        serde_json::json!([{"name": "claude-code", "synced": true}])
+        serde_json::json!([
+            {"name": "claude-code", "synced": true},
+            {"name": "pi", "synced": false}
+        ])
     );
 }
 

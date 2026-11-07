@@ -1,4 +1,5 @@
 mod claude_code;
+mod pi;
 
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -8,7 +9,7 @@ use crate::item::{ItemId, Items, KeyPath, is_within};
 use crate::paths::Paths;
 use crate::report::UndeclaredMarketplace;
 
-pub(crate) static HARNESSES: [&Harness; 1] = [&claude_code::HARNESS];
+pub(crate) static HARNESSES: [&Harness; 2] = [&claude_code::HARNESS, &pi::HARNESS];
 
 pub(crate) type Commands = fn(&ItemId, &Value) -> Vec<(KeyPath, String)>;
 pub(crate) type MarketplaceCheck =
@@ -25,7 +26,7 @@ pub(crate) struct Harness {
     pub(crate) never_referenced: &'static [&'static str],
     pub(crate) credentials: &'static [&'static str],
     pub(crate) commands: Commands,
-    pub(crate) undeclared_marketplaces: MarketplaceCheck,
+    pub(crate) undeclared_marketplaces: Option<MarketplaceCheck>,
 }
 
 #[derive(Debug)]
@@ -46,6 +47,7 @@ pub(crate) struct KeyedFile {
 pub(crate) enum Keys {
     All,
     Only(&'static [&'static str]),
+    Except(&'static [&'static str]),
 }
 
 impl KeyedFile {
@@ -53,6 +55,7 @@ impl KeyedFile {
         match self.keys {
             Keys::All => true,
             Keys::Only(keys) => keys.contains(&key),
+            Keys::Except(keys) => !keys.contains(&key),
         }
     }
 
@@ -156,9 +159,13 @@ mod tests {
 
     #[test]
     fn a_harness_owns_the_paths_at_and_below_its_roots() {
-        assert!(owner(".claude.json").is_some());
-        assert!(owner(".claude/settings.json").is_some());
-        assert!(owner(".claudex/a").is_none());
-        assert!(owner("README.md").is_none());
+        let name = |file: &str| owner(file).map(|harness| harness.name);
+
+        assert_eq!(name(".claude.json"), Some("claude-code"));
+        assert_eq!(name(".claude/settings.json"), Some("claude-code"));
+        assert_eq!(name(".pi/agent/models.json"), Some("pi"));
+        assert_eq!(name(".claudex/a"), None);
+        assert_eq!(name(".pi/other"), None);
+        assert_eq!(name("README.md"), None);
     }
 }
