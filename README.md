@@ -1,8 +1,8 @@
 # harness-sync
 
-harness-sync keeps the Claude Code user-level setup of several machines in step through a git repo you own. Each machine
-pushes its own changes and pulls the changes of the others; no machine is the master. A human runs the first setup, and
-after that an LLM agent can run every command without a terminal, reading JSON reports and exit codes.
+harness-sync keeps the user-level setup of Claude Code and pi on several machines in step through a git repo you own.
+Each machine pushes its own changes and pulls the changes of the others; no machine is the master. A human runs the
+first setup, and after that an LLM agent can run every command without a terminal, reading JSON reports and exit codes.
 
 The design and the decisions behind it are in [`design-docs/`](design-docs/).
 
@@ -65,7 +65,7 @@ remote.
 Create an empty private repo on any git host, then connect the machine and send its setup:
 
 ```sh
-harness-sync init git@github.com:you/claude-setup.git
+harness-sync init git@github.com:you/agent-setup.git
 harness-sync push
 ```
 
@@ -82,7 +82,7 @@ push refuses, and pull treats each of its items that differs as a conflict.
 ## Set up another machine
 
 ```sh
-harness-sync init git@github.com:you/claude-setup.git
+harness-sync init git@github.com:you/agent-setup.git
 harness-sync pull --prefer remote
 ```
 
@@ -97,7 +97,7 @@ status and pull read it, and push sends to it. `init` makes the first repo the p
 own list in `~/.harness-sync/config.toml`, because the repos a machine can reach differ.
 
 ```sh
-harness-sync target add mirror git@example.com:you/claude-setup.git --branch master
+harness-sync target add mirror git@example.com:you/agent-setup.git --branch master
 harness-sync target list
 harness-sync target primary mirror
 harness-sync target remove mirror
@@ -193,8 +193,9 @@ exclude = [".claude/statusline-mac.sh", ".claude/settings.json:/model"]
 ```
 
 - `secrets` marks every string under each key path as a secret.
-- `include` adds files, whole directories, and `~/.claude.json` keys to the catalog. A file or directory outside
-  `~/.claude` syncs too, at its path under the home directory. `include` never adds the credentials file.
+- `include` adds files, whole directories, and keys of the JSON files that sync key by key, such as
+  `~/.claude.json`. A file or directory that no harness owns syncs too, at its path under the home directory. `include`
+  never adds a credentials file.
 - `exclude` removes every item under each entry, on every machine. `harness-sync declarations add exclude` also removes
   those items from the repo in the same commit.
 
@@ -268,7 +269,7 @@ item.
 ## Limitations
 
 - The home directory in the content of an authored file is not rewritten; only JSON values get the home-path token.
-- Symlinks under the Claude Code directory are skipped.
+- Symlinks are skipped.
 - An array or object that pull adds to a JSON file gets the formatting of the JSON editor, and an added array is written
   on one line.
 - On Windows the executable bit of a file comes from the remote snapshot.
