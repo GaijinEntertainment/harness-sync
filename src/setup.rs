@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 
 use crate::declarations::Declarations;
 use crate::git::{Git, TreeChange};
-use crate::item::{Items, JSON_SOURCES, JsonFile, KeyPath, json_document, json_items};
+use crate::item::{Items, JSON_SOURCES, JsonFile, KeyPath, Source, json_document, json_items};
 use crate::json_edit::{self, Edit};
 use crate::paths::Paths;
 use crate::{atomic, files};
@@ -107,6 +107,30 @@ pub(crate) fn json_changes(items: &Items) -> Result<Vec<TreeChange>> {
             })
         })
         .collect()
+}
+
+pub(crate) fn excluded_removals(
+    git: &Git,
+    commit: Option<&str>,
+    declarations: &Declarations,
+) -> Result<Vec<TreeChange>> {
+    let (excluded, kept): (Items, Items) = load_whole_snapshot(git, commit, &declarations.include)?
+        .into_iter()
+        .partition(|(id, _)| declarations.excludes(id));
+    let mut changes = if excluded.keys().any(|id| id.source != Source::File) {
+        json_changes(&kept)?
+    } else {
+        Vec::new()
+    };
+    changes.extend(
+        excluded
+            .keys()
+            .filter(|id| id.source == Source::File)
+            .map(|id| TreeChange::Delete {
+                path: files::snapshot_path(id),
+            }),
+    );
+    Ok(changes)
 }
 
 pub(crate) fn write_local(
