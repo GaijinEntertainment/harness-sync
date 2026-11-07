@@ -89,3 +89,25 @@ fn a_gerrit_primary_keeps_the_base_commit_until_the_change_merges() {
     );
     assert_eq!(merged["items"], json!([]));
 }
+
+#[test]
+fn a_declarations_change_on_a_gerrit_target_goes_for_review() {
+    let review = gerrit_remote();
+    let machine = Machine::new();
+    assert_exit(&machine.cc_sync(&["init", &review.url(), "--gerrit"]), 0);
+    let branch_head = review.head("main");
+
+    let (report, output) =
+        machine.cc_sync_json(&["declarations", "add", "exclude", "settings:/model"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(review.head("main"), branch_head);
+    let change = change_ref(&review);
+    assert!(has_change_id(&review, &change));
+    assert!(
+        review
+            .show(&format!("{change}:cc-sync.toml"))
+            .contains("settings:/model")
+    );
+    assert_eq!(report["pushes"][0]["review"]["change_url"], CHANGE_URL);
+}

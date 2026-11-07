@@ -105,6 +105,19 @@ fn human(report: &Report) -> String {
             );
         }
     }
+    if let Some(declarations) = &report.declarations {
+        let lists = [
+            ("secrets", &declarations.secrets),
+            ("include", &declarations.include),
+            ("exclude", &declarations.exclude),
+        ];
+        for (list, entries) in lists {
+            for entry in entries {
+                // ignored: writing to a String cannot fail
+                let _ = writeln!(text, "  {list:<8}  {entry}");
+            }
+        }
+    }
     for target in &report.targets {
         let gerrit = if target.kind == Kind::Gerrit {
             "  (gerrit)"
