@@ -12,8 +12,7 @@ The design and the decisions behind it are in [`design-docs/`](design-docs/).
   `extraKnownMarketplaces`, `pluginConfigs`, `skillOverrides`, and `modelSettings` are one item each.
 - From `~/.claude.json`: each MCP server in `mcpServers`, the Global config keys of the Claude Code settings reference,
   the settings keys that Claude Code reads from `~/.claude.json` when no settings file sets them, and the preference
-  keys `autoUpdates`, `showSpinnerTree`, `diffSidebarOpen`, `deepLinkTerminal`, `lspRecommendationDisabled`, and
-  `companionMuted`.
+  keys `showSpinnerTree`, `diffSidebarOpen`, `deepLinkTerminal`, `lspRecommendationDisabled`, and `companionMuted`.
 - The authored files under `~/.claude/`: `CLAUDE.md`, `keybindings.json`, and the files in `rules/`, `skills/`,
   `agents/`, `commands/`, `output-styles/`, `workflows/`, and `themes/`. A file keeps its executable bit.
 - Referenced files: a file under `~/.claude/` that a synced JSON string names, such as a status line script or a hook
