@@ -35,9 +35,10 @@ phase ends with the gates of `.claude/rules/rust.md` and an end-to-end test agai
 
 **Acceptance criteria:**
 
-- [ ] No module outside `harness/claude_code.rs` names a Claude Code path or key.
-- [ ] `harness-sync.toml`, pins, `--take`, and reports use path ids.
-- [ ] The remote snapshot has no `settings.json`, `claude.json`, or `files/` at its root.
+- [x] No module outside `harness/claude_code.rs` decides on a Claude Code path or key; help texts and messages name
+  them only as examples.
+- [x] `harness-sync.toml`, pins, `--take`, and reports use path ids.
+- [x] The remote snapshot has no `settings.json`, `claude.json`, or `files/` at its root.
 
 ## Phase 2: Harness lists per machine, and root files
 
@@ -65,8 +66,8 @@ phase ends with the gates of `.claude/rules/rust.md` and an end-to-end test agai
 
 **Acceptance criteria:**
 
-- [ ] `harness-sync harness list --json` reports the listed and the compiled-in harnesses.
-- [ ] ADR 1.5 and ADR 1.3 pending lines removed.
+- [x] `harness-sync harness list --json` reports the listed and the compiled-in harnesses.
+- [x] ADR 1.5 and ADR 1.3 pending lines removed.
 
 ## Phase 3: The pi harness and the secret name rule
 
@@ -89,7 +90,7 @@ phase ends with the gates of `.claude/rules/rust.md` and an end-to-end test agai
 
 **Acceptance criteria:**
 
-- [ ] ADR 1.1, 1.2, 1.4, and 1.13 pending lines removed.
+- [x] ADR 1.1, 1.2, 1.4, and 1.13 pending lines removed.
 
 ## Phase 4: The storage trait
 
@@ -111,7 +112,7 @@ phase ends with the gates of `.claude/rules/rust.md` and an end-to-end test agai
 
 **Acceptance criteria:**
 
-- [ ] ADR 1.16 pending line removed.
+- [x] ADR 1.16 pending line names only the move into `harness-sync-git`, which Phase 5 makes.
 
 ## Phase 5: The workspace split and the docs
 
