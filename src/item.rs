@@ -14,7 +14,7 @@ const SPLIT_SETTINGS_KEYS: [&str; 6] = [
     "modelSettings",
 ];
 
-const CLAUDE_KEYS: [&str; 30] = [
+const CLAUDE_KEYS: [&str; 29] = [
     "mcpServers",
     "autoConnectIde",
     "autoInstallIdeExtension",
@@ -39,7 +39,6 @@ const CLAUDE_KEYS: [&str; 30] = [
     "inputNeededNotifEnabled",
     "preferredNotifChannel",
     "remoteControlAtStartup",
-    "autoUpdates",
     "showSpinnerTree",
     "diffSidebarOpen",
     "deepLinkTerminal",
@@ -345,7 +344,6 @@ mod tests {
         assert_eq!(
             ids,
             [
-                "claude:/autoUpdates",
                 "claude:/mcpServers/kartta",
                 "claude:/mcpServers/web",
                 "claude:/numStartups",
