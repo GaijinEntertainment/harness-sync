@@ -11,7 +11,6 @@ mod home;
 mod init;
 mod item;
 mod json_edit;
-mod marketplaces;
 mod output;
 mod paths;
 mod pin;

@@ -5,14 +5,14 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::compare::{Difference, ItemState};
-use crate::item::{ItemId, Items, JSON_SOURCES, JsonFile, KeyPath, Source};
+use crate::item::{ItemId, Items, JSON_SOURCES, KeyPath, Source};
 use crate::json_edit::Edit;
 use crate::output;
 use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, with_missing_secrets};
 use crate::session::Session;
 use crate::setup::Backup;
-use crate::{executables, files, home, marketplaces, secret, setup};
+use crate::{executables, files, home, secret, setup};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Side {
@@ -211,37 +211,6 @@ fn write(paths: &Paths, session: &Session, writes: &[(&ItemId, Option<Value>)]) 
         .collect();
     if !file_writes.is_empty() {
         files::write_local(paths, &session.git, &backup, &file_writes)?;
-    }
-    let marketplace_changes: Vec<(&ItemId, Option<&Value>)> = writes
-        .iter()
-        .filter(|(id, _)| id.source == Source::Marketplace)
-        .map(|(id, value)| (*id, value.as_ref()))
-        .collect();
-    let mut setup_after = session.local_setup.clone();
-    for (id, value) in writes {
-        match value {
-            Some(value) => setup_after.insert((*id).clone(), value.clone()),
-            None => setup_after.remove(*id),
-        };
-    }
-    let declared = marketplaces::declared_names(&setup_after);
-    let failures = marketplaces::apply(paths, &marketplace_changes, &declared);
-    ensure!(
-        failures.is_empty(),
-        "pull wrote the other changes but did not move the base commit, because the plugin setup is incomplete; \
-         fix the cause and run `cc-sync pull` again:\n  {}",
-        failures.join("\n  ")
-    );
-    let auto_updates = marketplaces::auto_updates(&marketplace_changes, &declared);
-    let edits: Vec<Edit<'_>> = auto_updates
-        .iter()
-        .map(|(path, flag)| Edit {
-            path,
-            value: Some(*flag),
-        })
-        .collect();
-    if !edits.is_empty() {
-        setup::write_local(paths, &backup, JsonFile::Settings, &edits)?;
     }
     Ok(())
 }

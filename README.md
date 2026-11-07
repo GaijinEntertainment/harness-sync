@@ -17,7 +17,9 @@ The design and the decisions behind it are in [`design-docs/`](design-docs/).
   `agents/`, `commands/`, `output-styles/`, `workflows/`, and `themes/`. A file keeps its executable bit.
 - Referenced files: a file under `~/.claude/` that a synced JSON string names, such as a status line script or a hook
   script, and a file that a synced Markdown file imports with `@` or links with a relative link.
-- The plugin marketplaces, from `known_marketplaces.json` and `extraKnownMarketplaces`.
+- The plugin setup, as the settings entries above: `enabledPlugins`, `extraKnownMarketplaces`, and `pluginConfigs`.
+  cc-sync runs no Claude Code command. After its next session starts, Claude Code clones each declared marketplace
+  that it lacks and downloads the enabled plugins. A marketplace that settings do not declare does not sync.
 
 Everything else stays on the machine: the rest of `~/.claude.json` (counters, caches, account data, the `projects`
 records), credentials, history, sessions, auto-memory, `skills/synced/`, the plugin install records, and the plugin
@@ -34,7 +36,6 @@ cargo install --locked --git https://github.com/xobotyi/cc-sync
 ```
 
 cc-sync runs every repo operation through the `git` executable, so `git` must be on PATH with access to your remote.
-Pull calls the `claude` CLI to add or remove a plugin marketplace.
 
 ## Set up the first machine
 
@@ -180,7 +181,6 @@ Item ids name what `--take`, `pin`, and `unpin` act on:
 - `settings:/<JSON pointer>`, for example `settings:/env/EDITOR`
 - `claude:/<JSON pointer>`, for example `claude:/mcpServers/kartta`
 - `file:<path under ~/.claude>`, for example `file:rules/rust.md`
-- `marketplace:<name>`
 
 A key path for `secret set` has the same form as an item id and can point deeper into an item.
 

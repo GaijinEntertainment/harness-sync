@@ -10,7 +10,7 @@ use crate::git::{Git, TreeChange};
 use crate::item::{Items, JSON_SOURCES, JsonFile, KeyPath, json_document, json_items};
 use crate::json_edit::{self, Edit};
 use crate::paths::Paths;
-use crate::{atomic, files, marketplaces};
+use crate::{atomic, files};
 
 #[derive(Debug)]
 pub(crate) struct Backup {
@@ -29,9 +29,6 @@ impl Backup {
 
     pub(crate) fn save(&self, relative: &Path, content: &[u8]) -> Result<()> {
         let path = self.dir.join(relative);
-        if path.exists() {
-            return Ok(());
-        }
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
         }
@@ -53,8 +50,6 @@ pub(crate) fn load_local(paths: &Paths, git: &Git, declarations: &Declarations) 
     items.retain(|id, _| !declarations.excludes(id));
     let files = files::load_local(git, paths, &items, &declarations.include)?;
     items.extend(files);
-    let marketplaces = marketplaces::load_local(paths, &items)?;
-    items.extend(marketplaces);
     items.retain(|id, _| !declarations.excludes(id));
     Ok(items)
 }
@@ -72,7 +67,6 @@ pub(crate) fn load_snapshot(
         .map(|source| format!("{commit}:{}", source.snapshot_file()))
         .collect();
     let mut items = files::load_snapshot(git, commit)?;
-    items.extend(marketplaces::load_snapshot(git, commit)?);
     for ((source, spec), content) in JSON_SOURCES.iter().zip(&specs).zip(git.read_files(&specs)?) {
         if let Some(bytes) = content {
             items.extend(parse(
@@ -95,7 +89,7 @@ fn parse(file: JsonFile, bytes: &[u8], origin: &Path, include: &[KeyPath]) -> Re
 }
 
 pub(crate) fn json_changes(items: &Items) -> Result<Vec<TreeChange>> {
-    let mut changes: Vec<TreeChange> = JSON_SOURCES
+    JSON_SOURCES
         .iter()
         .map(|&source| {
             let mut content = serde_json::to_vec_pretty(&json_document(items, source))
@@ -112,9 +106,7 @@ pub(crate) fn json_changes(items: &Items) -> Result<Vec<TreeChange>> {
                 executable: false,
             })
         })
-        .collect::<Result<_>>()?;
-    changes.push(marketplaces::snapshot_change(items)?);
-    Ok(changes)
+        .collect()
 }
 
 pub(crate) fn write_local(
@@ -141,23 +133,4 @@ pub(crate) fn write_local(
         fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
     }
     atomic::write(&path, edited.as_bytes())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_backup_keeps_the_first_copy_of_a_file() {
-        let home = tempfile::tempdir().unwrap();
-        let backup = Backup::new(&Paths::for_home(home.path()));
-
-        backup.save(Path::new("settings.json"), b"before").unwrap();
-        backup.save(Path::new("settings.json"), b"between").unwrap();
-
-        assert_eq!(
-            fs::read(backup.dir.join("settings.json")).unwrap(),
-            b"before"
-        );
-    }
 }

@@ -92,7 +92,6 @@ impl JsonFile {
 pub(crate) enum Source {
     Json(JsonFile),
     File,
-    Marketplace,
 }
 
 impl Source {
@@ -100,7 +99,6 @@ impl Source {
         match self {
             Self::Json(file) => file.name(),
             Self::File => "file",
-            Self::Marketplace => "marketplace",
         }
     }
 
@@ -121,7 +119,6 @@ impl Source {
                 }
             }
             Self::File => path.len(),
-            Self::Marketplace => 1,
         }
     }
 }
@@ -211,7 +208,7 @@ impl FromStr for KeyPath {
 
 fn write_pointer(f: &mut fmt::Formatter<'_>, source: Source, path: &[String]) -> fmt::Result {
     write!(f, "{}:", source.name())?;
-    if matches!(source, Source::File | Source::Marketplace) {
+    if source == Source::File {
         return write!(f, "{}", path.join("/"));
     }
     for segment in path {
@@ -229,13 +226,6 @@ fn parse_pointer(text: &str) -> Result<(Source, Vec<String>)> {
             "`{text}` is not a file item id; a file item id looks like `file:rules/NAME.md`"
         );
         return Ok((Source::File, path));
-    }
-    if let Some(name) = text.strip_prefix("marketplace:") {
-        ensure!(
-            !name.is_empty() && !name.contains('/'),
-            "`{text}` is not a marketplace item id; a marketplace item id looks like `marketplace:NAME`"
-        );
-        return Ok((Source::Marketplace, vec![name.to_owned()]));
     }
     let Some((source, pointer)) = text
         .split_once(':')
