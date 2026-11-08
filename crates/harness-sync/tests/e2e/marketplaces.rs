@@ -95,6 +95,38 @@ fn a_declared_marketplace_reaches_the_other_machine_as_settings_alone() {
 }
 
 #[test]
+fn a_push_to_several_targets_keeps_the_marketplace_warnings_of_each() {
+    let primary = Remote::new();
+    let mirror = Remote::new();
+    mirror.commit_file(
+        "main",
+        "harness-sync.toml",
+        "exclude = [\".claude/settings.json:/extraKnownMarketplaces/acme\"]\n",
+    );
+    let machine = Machine::new();
+    machine.write_settings(&json!({"model": "opus"}));
+    machine.write_file(".claude/plugins/known_marketplaces.json", KNOWN);
+    assert_exit(&machine.harness_sync(&["init", &primary.url()]), 0);
+    assert_exit(&machine.harness_sync(&["push"]), 0);
+    assert_exit(
+        &machine.harness_sync(&["target", "add", "mirror", &mirror.url()]),
+        0,
+    );
+    machine.write_settings(&json!({"model": "haiku"}));
+
+    let (report, output) = machine.harness_sync_json(&["push", "--to", "all"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(
+        report["undeclared_marketplaces"],
+        json!([
+            {"name": "acme", "declaration": {"source": {"source": "github", "repo": "acme/plugins"}, "autoUpdate": true}},
+            {"name": "legacy", "declaration": {"source": {"source": "github", "repo": "team/legacy"}}}
+        ])
+    );
+}
+
+#[test]
 fn status_and_push_warn_about_a_marketplace_that_settings_do_not_declare() {
     let remote = Remote::new();
     remote.commit_file(

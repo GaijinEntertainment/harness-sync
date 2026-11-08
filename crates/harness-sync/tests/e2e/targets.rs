@@ -147,6 +147,33 @@ fn connected_with_mirror(primary: &Remote, mirror: &Remote) -> Machine {
 }
 
 #[test]
+fn a_push_that_fails_at_a_later_target_names_the_targets_before_it() {
+    let primary = Remote::new();
+    let mirror = Remote::new();
+    let backup = Remote::new();
+    let machine = connected_with_mirror(&primary, &mirror);
+    assert_exit(
+        &machine.harness_sync(&["target", "add", "backup", &backup.url()]),
+        0,
+    );
+    machine.write_settings(&json!({"model": "haiku"}));
+    std::fs::remove_dir_all(mirror.path()).unwrap();
+
+    let output = machine.harness_sync(&["push", "--to", "all"]);
+
+    assert_exit(&output, 1);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "cannot push to the target `mirror`; the push to `origin`, `backup` ran before it"
+        ),
+        "{stderr}"
+    );
+    assert_eq!(snapshot_settings(&primary), json!({"model": "haiku"}));
+    assert_eq!(snapshot_settings(&backup), json!({"model": "haiku"}));
+}
+
+#[test]
 fn a_push_to_a_target_replaces_its_snapshot_and_keeps_the_base_commit() {
     let primary = Remote::new();
     let mirror = Remote::new();
