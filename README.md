@@ -188,8 +188,9 @@ harness-sync declarations remove exclude .claude/settings.json:/model --target m
 harness-sync declarations show
 ```
 
-The command rewrites the file and drops its comments. You can also edit the file in any clone of the repo; push keeps
-the files it does not manage. The file looks like this:
+The command rewrites the file and drops its comments. You can also edit the file in any clone of the repo, then
+`git commit` it and `git push` it to the target's branch, or to `refs/for/<branch>` for a Gerrit target.
+`harness-sync push` keeps the files that it does not manage. The file looks like this:
 
 ```toml
 secrets = [".claude/settings.json:/env/INTERNAL_WEBHOOK"]
@@ -261,7 +262,8 @@ A report looks like this:
   replaced there. `targets` lists `{name, url, branch, kind, primary}` for `target list`, `harnesses` lists
   `{name, synced}` for `harness list`, and `declarations` lists `{target, secrets, include, exclude}` for the
   `declarations` commands.
-- A file item shows its git blob id and executable bit in place of its content.
+- A file item shows `{blob}`, its git blob id, in place of its content, and `executable: true` when the file is
+  executable.
 
 Item ids name what `--take`, `pin`, and `unpin` act on. An item id is the path of the file relative to the home
 directory, and for a JSON key the path, `:`, and a JSON pointer:
@@ -271,8 +273,8 @@ directory, and for a JSON key the path, `:`, and a JSON pointer:
 - `.claude/rules/rust.md`
 
 The repo holds each file at the same path, so `.claude/settings.json` in the repo holds the synced keys of
-`~/.claude/settings.json`. A key path for `secret set` has the same form as an item id and can point deeper into an
-item.
+`~/.claude/settings.json`. A key path for `secret set` names a key of a JSON file, in the form of an item id, and can
+point deeper into an item.
 
 ## Limitations
 
