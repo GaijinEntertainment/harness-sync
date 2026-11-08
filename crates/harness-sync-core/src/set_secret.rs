@@ -22,7 +22,9 @@ use crate::{secret, setup, storage};
 pub fn run(paths: &Paths, key: &KeyPath, value: impl FnOnce() -> Result<String>) -> Result<Report> {
     let mut missing = secret::load_missing(&paths.missing_secrets_file())?;
     ensure!(
-        missing.contains(key) || secret::is_secret_path(key, &declared_secrets(paths)?),
+        missing.contains(key)
+            || secret::is_secret_path(key, &[])
+            || secret::is_secret_path(key, &declared_secrets(paths)?),
         "`{key}` is not a secret key path: no secret name rule matches it, harness-sync.toml in the repo does not declare it, \
          and pull did not record it as missing"
     );
@@ -56,6 +58,7 @@ fn declared_secrets(paths: &Paths) -> Result<Vec<KeyPath>> {
         return Ok(Vec::new());
     };
     let storage = storage::open(paths, &config, &config.primary)?;
+    storage.fetch()?;
     let remote_commit = storage.head()?;
     Ok(Declarations::load(storage.as_ref(), remote_commit.as_deref())?.secrets)
 }
