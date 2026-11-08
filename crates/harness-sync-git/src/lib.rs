@@ -130,9 +130,9 @@ impl Storage for GitTarget {
             Ok(_) => Ok(Publish::Published),
             Err(err) if self.gerrit => Err(err),
             Err(err) => {
-                let fetched = self.head()?;
+                let parent = self.git.resolve(&format!("{commit}^"))?;
                 self.fetch()?;
-                if self.head()? == fetched {
+                if self.head()? == parent {
                     return Err(err);
                 }
                 Ok(Publish::RemoteAhead)
@@ -409,6 +409,45 @@ fn run(mut command: Command, subcommand: &str) -> Result<Output> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_push_rejected_after_another_fetch_moved_the_tracking_ref_is_remote_ahead() {
+        let dir = tempfile::tempdir().unwrap();
+        let remote = Git {
+            git_dir: dir.path().join("remote.git"),
+        };
+        remote.init_bare().unwrap();
+        let machine = |repo: &str| GitTarget {
+            git: Git {
+                git_dir: dir.path().join(repo),
+            },
+            name: "origin".to_owned(),
+            url: remote.git_dir.to_string_lossy().into_owned(),
+            branch: "main".to_owned(),
+            gerrit: false,
+        };
+        let write = |text: &str| {
+            [FileChange::Write {
+                path: "a.md".to_owned(),
+                content: text.as_bytes().to_vec(),
+                executable: false,
+            }]
+        };
+        let (first, second) = (machine("first.git"), machine("second.git"));
+        first.connect().unwrap();
+        let base = first.commit(None, &write("one"), "one").unwrap();
+        assert_eq!(first.publish(&base).unwrap(), Publish::Published);
+        second.connect().unwrap();
+        second.fetch().unwrap();
+        let theirs = second.commit(Some(&base), &write("two"), "two").unwrap();
+        assert_eq!(second.publish(&theirs).unwrap(), Publish::Published);
+        let ours = first.commit(Some(&base), &write("three"), "three").unwrap();
+        first.fetch().unwrap();
+
+        let published = first.publish(&ours).unwrap();
+
+        assert_eq!(published, Publish::RemoteAhead);
+    }
 
     #[test]
     fn tree_records_yield_blobs_with_their_mode() {

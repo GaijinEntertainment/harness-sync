@@ -198,6 +198,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "harness-sync-core",
+ "tempfile",
 ]
 
 [[package]]
