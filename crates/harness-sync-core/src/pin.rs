@@ -24,16 +24,9 @@ pub fn run(paths: &Paths, id: &ItemId, pinned: bool) -> Result<Report> {
     )?;
     let text = id.to_string();
     let changed = if pinned {
-        let added = !config.pins.contains(&text);
-        if added {
-            config.pins.push(text);
-            config.pins.sort();
-        }
-        added
+        config.pins.insert(text)
     } else {
-        let before = config.pins.len();
-        config.pins.retain(|pin| pin != &text);
-        config.pins.len() != before
+        config.pins.remove(&text)
     };
     if changed {
         config.save(&config_file)?;
