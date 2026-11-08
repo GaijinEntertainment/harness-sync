@@ -25,9 +25,8 @@ pub fn run(paths: &Paths, to: &[String]) -> Result<Report> {
     let config = Config::load_connected(&paths.config_file())?;
     let mut pushed = Vec::new();
     for target in chosen_targets(&config, to)? {
-        let session = Session::open_target(paths, Some(&target))?;
-        let (report, review) = push(paths, &session)
-            .with_context(|| format!("cannot push to the target `{target}`"))?;
+        let (session, report, review) =
+            push_to(paths, &target).with_context(|| failure(&target, &pushed))?;
         let stop = report.outcome != Outcome::Ok;
         pushed.push((session, report, review));
         if stop {
@@ -35,6 +34,27 @@ pub fn run(paths: &Paths, to: &[String]) -> Result<Report> {
         }
     }
     Ok(combine(pushed))
+}
+
+fn push_to(paths: &Paths, target: &str) -> Result<(Session, Report, Option<Review>)> {
+    let session = Session::open_target(paths, Some(target))?;
+    let (report, review) = push(paths, &session)?;
+    Ok((session, report, review))
+}
+
+fn failure(target: &str, pushed: &[(Session, Report, Option<Review>)]) -> String {
+    let earlier: Vec<String> = pushed
+        .iter()
+        .map(|(session, _, _)| format!("`{}`", session.target))
+        .collect();
+    if earlier.is_empty() {
+        format!("cannot push to the target `{target}`")
+    } else {
+        format!(
+            "cannot push to the target `{target}`; the push to {} ran before it",
+            earlier.join(", ")
+        )
+    }
 }
 
 fn chosen_targets(config: &Config, to: &[String]) -> Result<Vec<String>> {
@@ -140,7 +160,11 @@ fn combine(pushed: Vec<(Session, Report, Option<Review>)>) -> Report {
     for (session, report, review) in pushed {
         combined.outcome = report.outcome;
         combined.secrets_found.extend(report.secrets_found);
-        combined.undeclared_marketplaces = report.undeclared_marketplaces;
+        for marketplace in report.undeclared_marketplaces {
+            if !combined.undeclared_marketplaces.contains(&marketplace) {
+                combined.undeclared_marketplaces.push(marketplace);
+            }
+        }
         let mut target = TargetPush {
             target: session.target.clone(),
             outcome: report.outcome,
