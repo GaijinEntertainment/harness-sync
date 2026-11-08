@@ -68,6 +68,48 @@ fn a_missing_secret_is_listed_and_is_not_a_local_deletion() {
 }
 
 #[test]
+fn a_missing_secret_in_an_array_leaves_the_array_out_and_keeps_it_in_the_repo() {
+    let remote = Remote::new();
+    remote.commit_file(
+        "main",
+        "harness-sync.toml",
+        "secrets = [\".claude.json:/mcpServers/kartta/args/1\"]\n",
+    );
+    let first = Machine::new();
+    first.write_file(
+        ".claude.json",
+        &json!({"mcpServers": {"kartta": {"command": "kartta", "args": ["--token", TOKEN, "-v"]}}})
+            .to_string(),
+    );
+    assert_exit(&first.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&first.harness_sync(&["pull"]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
+    let second = connected(&remote, &json!({}));
+    let args = json!([
+        "--token",
+        "<harness-sync secret .claude.json:/mcpServers/kartta/args/1>",
+        "-v"
+    ]);
+
+    assert_exit(&second.harness_sync(&["pull"]), 0);
+
+    let local: Value = serde_json::from_str(&second.read_file(".claude.json").unwrap()).unwrap();
+    assert_eq!(
+        local,
+        json!({"mcpServers": {"kartta": {"command": "kartta"}}})
+    );
+    let (status, _) = second.harness_sync_json(&["status"]);
+    assert_eq!(
+        status["items"][0]["id"],
+        ".claude.json:/mcpServers/kartta/args"
+    );
+    second.write_settings(&json!({"model": "opus"}));
+    assert_exit(&second.harness_sync(&["push"]), 0);
+    let snapshot: Value = serde_json::from_str(&remote.show("main:.claude.json")).unwrap();
+    assert_eq!(snapshot["mcpServers"]["kartta"]["args"], args);
+}
+
+#[test]
 fn a_token_outside_a_placeholder_blocks_the_push() {
     let remote = Remote::new();
     let machine = connected(&remote, &json!({"env": {"NOTE": TOKEN}, "model": "opus"}));
