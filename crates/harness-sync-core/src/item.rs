@@ -177,28 +177,40 @@ pub(crate) fn json_items(file: &KeyedFile, document: Value, include: &[KeyPath])
     let Value::Object(keys) = document else {
         bail!("the document does not hold a JSON object");
     };
-    let included = |key: &str| {
-        include.iter().any(|path| {
-            path.file == file.path && path.path.first().is_some_and(|first| first == key)
+    let included: Vec<(Vec<String>, Value)> = include
+        .iter()
+        .filter(|path| {
+            path.file == file.path && path.path.first().is_some_and(|first| !file.holds(first))
         })
-    };
-    let mut items = Items::new();
-    for (key, value) in keys
+        .filter_map(|path| {
+            value_at(&keys, &path.path).map(|value| (path.path.clone(), value.clone()))
+        })
+        .collect();
+    let held = keys
         .into_iter()
-        .filter(|(key, _)| file.holds(key) || included(key))
-    {
+        .filter(|(key, _)| file.holds(key))
+        .map(|(key, value)| (vec![key], value));
+    let mut items = Items::new();
+    for (path, value) in held.chain(included) {
         match value {
-            Value::Object(entries) if file.splits(&key) => {
+            Value::Object(entries) if path.len() == 1 && file.splits(&path[0]) => {
                 for (name, entry) in entries {
-                    items.insert(ItemId::key(file.path, &[&key, &name]), entry);
+                    items.insert(ItemId::key(file.path, &[&path[0], &name]), entry);
                 }
             }
             value => {
-                items.insert(ItemId::key(file.path, &[&key]), value);
+                let file = file.path.to_owned();
+                items.insert(ItemId { file, path }, value);
             }
         }
     }
     Ok(items)
+}
+
+fn value_at<'a>(keys: &'a Map<String, Value>, path: &[String]) -> Option<&'a Value> {
+    let (first, rest) = path.split_first()?;
+    rest.iter()
+        .try_fold(keys.get(first)?, |value, key| value.get(key))
 }
 
 #[cfg(test)]
@@ -268,6 +280,33 @@ mod tests {
                 ".claude.json:/numStartups",
                 ".claude.json:/theme"
             ]
+        );
+    }
+
+    #[test]
+    fn an_include_of_a_nested_key_selects_that_key_alone() {
+        let items = json_items(
+            keyed_file(".claude.json").unwrap(),
+            json!({
+                "projects": {"/x": {"allowedTools": ["Bash"]}, "/y": {"allowedTools": []}},
+                "theme": "dark"
+            }),
+            &[
+                ".claude.json:/projects/~1x".parse().unwrap(),
+                ".claude.json:/projects/~1z".parse().unwrap(),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(
+            items,
+            Items::from([
+                (
+                    ItemId::key(".claude.json", &["projects", "/x"]),
+                    json!({"allowedTools": ["Bash"]})
+                ),
+                (ItemId::key(".claude.json", &["theme"]), json!("dark")),
+            ])
         );
     }
 

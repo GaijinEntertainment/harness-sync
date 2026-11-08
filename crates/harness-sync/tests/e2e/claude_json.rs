@@ -60,6 +60,44 @@ fn catalog_keys_of_claude_json_move_and_the_rest_stays_on_each_machine() {
 }
 
 #[test]
+fn an_include_of_a_nested_key_moves_that_key_alone() {
+    let remote = Remote::new();
+    remote.commit_file(
+        "main",
+        "harness-sync.toml",
+        "include = [\".claude.json:/projects/~1work~1app/allowedTools\"]\n",
+    );
+    let first = Machine::new();
+    first.write_file(
+        ".claude.json",
+        r#"{"projects": {"/work/app": {"allowedTools": ["Bash"], "lastSessionId": "s-1"}, "/work/other": {}}}"#,
+    );
+    assert_exit(&first.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&first.harness_sync(&["pull"]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
+    let second = Machine::new();
+    second.write_file(
+        ".claude.json",
+        r#"{"projects": {"/work/app": {"lastSessionId": "s-2"}}}"#,
+    );
+    assert_exit(&second.harness_sync(&["init", &remote.url()]), 0);
+
+    let output = second.harness_sync(&["pull"]);
+
+    assert_exit(&output, 0);
+    let snapshot: Value = serde_json::from_str(&remote.show("main:.claude.json")).unwrap();
+    assert_eq!(
+        snapshot,
+        json!({"projects": {"/work/app": {"allowedTools": ["Bash"]}}})
+    );
+    let pulled: Value = serde_json::from_str(&second.read_file(".claude.json").unwrap()).unwrap();
+    assert_eq!(
+        pulled,
+        json!({"projects": {"/work/app": {"lastSessionId": "s-2", "allowedTools": ["Bash"]}}})
+    );
+}
+
+#[test]
 fn claude_config_dir_moves_both_claude_code_files() {
     let remote = Remote::new();
     let machine = Machine::new();
