@@ -246,8 +246,10 @@ fn pull_warns_about_an_executable_that_is_not_installed() {
         json!([{"id": ".claude/settings.json:/hooks/Stop/0/hooks/1/command", "executable": "harness-sync-e2e-missing-tool"}])
     );
     assert!(
-        String::from_utf8_lossy(&text.stderr)
-            .contains("warning: .claude/settings.json:/hooks/Stop/0/hooks/1/command runs"),
+        String::from_utf8_lossy(&text.stderr).contains(
+            "warning: .claude/settings.json:/hooks/Stop/0/hooks/1/command runs \
+                 `harness-sync-e2e-missing-tool`"
+        ),
         "stderr: {}",
         String::from_utf8_lossy(&text.stderr)
     );
