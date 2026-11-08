@@ -16,9 +16,10 @@ use crate::storage;
 ///
 /// # Errors
 ///
-/// Fails when this machine is connected to another primary target, a harness is unknown, no harness directory
-/// exists, or the storage cannot be set up or fetched.
+/// Fails when the URL of `target` holds a password, this machine is connected to another primary target, a harness
+/// is unknown, no harness directory exists, or the storage cannot be set up or fetched.
 pub fn run(paths: &Paths, name: &str, target: Target, harnesses: &[String]) -> Result<Report> {
+    target.ensure_no_password()?;
     let config_file = paths.config_file();
     let remote = target.url.clone();
     let branch = target.branch.clone();

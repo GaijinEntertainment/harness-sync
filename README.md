@@ -94,7 +94,8 @@ do not travel; see [Secrets](#secrets) for how the new machine gets its own valu
 
 A machine can keep its setup in several git repos. Each repo is a target with a name, and one target is the primary:
 status and pull read it, and push sends to it. `init` makes the first repo the primary target. Each machine keeps its
-own list in `~/.harness-sync/config.toml`, because the repos a machine can reach differ.
+own list in `~/.harness-sync/config.toml`, because the repos a machine can reach differ. Reports print target URLs, so
+`init` and `target add` refuse a URL that holds a password; keep the password in a git credential helper.
 
 ```sh
 harness-sync target add mirror git@example.com:you/agent-setup.git --branch master

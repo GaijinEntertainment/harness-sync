@@ -55,6 +55,31 @@ fn a_target_name_is_letters_digits_dashes_and_underscores_but_not_all() {
 }
 
 #[test]
+fn a_target_url_with_a_password_is_refused_without_printing_it() {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    let url = "https://me:hunter2@example.com/setup.git";
+
+    let init = machine.harness_sync(&["init", url]);
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    let add = machine.harness_sync(&["target", "add", "mirror", url]);
+    let config = machine.read_file(".harness-sync/config.toml").unwrap();
+    machine.write_file(
+        ".harness-sync/config.toml",
+        &format!("{config}\n[targets.mirror]\nurl = \"{url}\"\nbranch = \"main\"\n"),
+    );
+    let list = machine.harness_sync(&["target", "list"]);
+
+    for output in [&init, &add, &list] {
+        assert_exit(output, 1);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("holds a password"), "{stderr}");
+        assert!(!stderr.contains("hunter2"));
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("hunter2"));
+    }
+}
+
+#[test]
 fn only_a_target_that_is_not_the_primary_can_be_removed() {
     let primary = Remote::new();
     let mirror = Remote::new();
