@@ -128,7 +128,7 @@ enum DeclarationsCommand {
         /// List to change
         #[arg(value_enum)]
         list: ListArg,
-        /// Key paths or item ids, for example `.claude/settings.json:/extraKnownMarketplaces/NAME`
+        /// Item ids or directory paths, for example `.claude/settings.json:/env/NAME` or `.claude/hooks`
         #[arg(required = true)]
         entries: Vec<KeyPath>,
         /// Target to change instead of the primary
@@ -140,7 +140,7 @@ enum DeclarationsCommand {
         /// List to change
         #[arg(value_enum)]
         list: ListArg,
-        /// Key paths or item ids to remove
+        /// Item ids or directory paths to remove
         #[arg(required = true)]
         entries: Vec<KeyPath>,
         /// Target to change instead of the primary
@@ -199,8 +199,8 @@ enum HarnessCommand {
 enum SecretCommand {
     /// Set a secret value on this machine, from a TTY prompt or from stdin
     Set {
-        /// Key path of the secret, for example `.claude/settings.json:/env/GITHUB_TOKEN`
-        key_path: KeyPath,
+        /// Item id of the secret, for example `.claude/settings.json:/env/GITHUB_TOKEN`
+        item_id: KeyPath,
     },
 }
 
@@ -242,8 +242,8 @@ fn execute(cli: &Cli) -> Result<Report> {
         Command::Pin { item } => pin::run(&paths, item, true),
         Command::Unpin { item } => pin::run(&paths, item, false),
         Command::Secret {
-            command: SecretCommand::Set { key_path },
-        } => set_secret::run(&paths, key_path, || output::read_secret(key_path, prompts)),
+            command: SecretCommand::Set { item_id },
+        } => set_secret::run(&paths, item_id, || output::read_secret(item_id, prompts)),
         Command::Target { command } => match command {
             TargetCommand::Add {
                 name,

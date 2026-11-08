@@ -18,19 +18,19 @@ use crate::{secret, setup, storage};
 ///
 /// # Errors
 ///
-/// Fails when `key` is not a secret key path of a keyed JSON file, `value` fails, or the file cannot be written.
+/// Fails when `key` does not name a secret in a keyed JSON file, `value` fails, or the file cannot be written.
 pub fn run(paths: &Paths, key: &KeyPath, value: impl FnOnce() -> Result<String>) -> Result<Report> {
     let mut missing = secret::load_missing(&paths.missing_secrets_file())?;
     ensure!(
         missing.contains(key)
             || secret::is_secret_path(key, &[])
             || secret::is_secret_path(key, &declared_secrets(paths)?),
-        "`{key}` is not a secret key path: no secret name rule matches it, harness-sync.toml in the repo does not declare it, \
+        "`{key}` does not name a secret: no secret name rule matches it, harness-sync.toml in the repo does not declare it, \
          and pull did not record it as missing"
     );
     let value = value()?;
     if keyed_file(&key.file).is_none() || key.path.is_empty() {
-        bail!("`{key}` is not a key path in a JSON file that harness-sync splits into keys");
+        bail!("`{key}` does not name a key of a JSON file that harness-sync splits into keys");
     }
     setup::write_local(
         paths,
