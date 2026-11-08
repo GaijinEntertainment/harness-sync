@@ -78,7 +78,12 @@ impl Session {
         } else {
             remote.clone()
         };
-        let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
+        let mut missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
+        let recorded = missing_secrets.len();
+        missing_secrets.retain(|key| !secret::has_value(&local_setup, key));
+        if missing_secrets.len() != recorded {
+            secret::save_missing(&paths.missing_secrets_file(), &missing_secrets)?;
+        }
         let mut local =
             secret::local_view(&local_setup, &missing_secrets, &declarations.secrets, &base);
         for value in local.values_mut() {

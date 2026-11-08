@@ -68,6 +68,31 @@ fn a_missing_secret_is_listed_and_is_not_a_local_deletion() {
 }
 
 #[test]
+fn a_missing_secret_that_the_machine_later_holds_and_deletes_is_a_deletion() {
+    let remote = Remote::new();
+    let first = connected(&remote, &json!({"env": {"GITHUB_TOKEN": TOKEN}}));
+    assert_exit(&first.harness_sync(&["push"]), 0);
+    let second = connected(&remote, &json!({}));
+    assert_exit(&second.harness_sync(&["pull"]), 0);
+    second.write_settings(&json!({"env": {"GITHUB_TOKEN": "own"}}));
+    let (status, _) = second.harness_sync_json(&["status"]);
+    assert_eq!(status["items"], json!([]));
+    second.write_settings(&json!({}));
+
+    let (pushed, output) = second.harness_sync_json(&["push"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(
+        pushed["items"][0]["id"],
+        ".claude/settings.json:/env/GITHUB_TOKEN"
+    );
+    let tree =
+        String::from_utf8_lossy(&remote.git(&["ls-tree", "-r", "--name-only", "main"]).stdout)
+            .into_owned();
+    assert!(!tree.contains("settings.json"), "tree: {tree}");
+}
+
+#[test]
 fn a_missing_secret_in_an_array_leaves_the_array_out_and_keeps_it_in_the_repo() {
     let remote = Remote::new();
     remote.commit_file(

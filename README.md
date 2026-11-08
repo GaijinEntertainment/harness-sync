@@ -156,7 +156,8 @@ code 5 and lists the key paths in `secrets_found`. Reports never print a secret 
 Pull keeps the value that this machine already has for each placeholder. When the machine has no value, pull asks for it
 on a terminal; without one, pull leaves the key out and lists it as `secret_missing`. A missing secret inside a JSON
 array leaves the whole array out, and `secret_missing` lists the array; edit the harness file to set it. A missing
-secret is not a deletion: the next push keeps the placeholder. Set the value later from a prompt or from stdin:
+secret is not a deletion: push keeps the placeholder until the local setup holds a value at the key. Set the value later
+from a prompt or from stdin:
 
 ```sh
 printf '%s' "$TOKEN" | harness-sync secret set .claude/settings.json:/env/GITHUB_TOKEN
