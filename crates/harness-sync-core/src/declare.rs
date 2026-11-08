@@ -104,7 +104,7 @@ pub fn show(paths: &Paths, target: Option<&str>) -> Result<Report> {
 ///
 /// Fails as [`show`] does, and when the commit cannot be written or published.
 pub fn add(paths: &Paths, target: Option<&str>, list: List, entries: &[KeyPath]) -> Result<Report> {
-    change(paths, target, list, |values| {
+    let changed = change(paths, target, list, |values| {
         let before = values.len();
         for entry in entries {
             let value = Value::String(entry.to_string());
@@ -113,6 +113,10 @@ pub fn add(paths: &Paths, target: Option<&str>, list: List, entries: &[KeyPath])
             }
         }
         values.len() != before
+    })?;
+    Ok(Report {
+        command: "declarations add",
+        ..changed
     })
 }
 
@@ -128,7 +132,7 @@ pub fn remove(
     entries: &[KeyPath],
 ) -> Result<Report> {
     let entries: Vec<String> = entries.iter().map(ToString::to_string).collect();
-    change(paths, target, list, |values| {
+    let changed = change(paths, target, list, |values| {
         let before = values.len();
         values.retain(|value| {
             !value
@@ -136,6 +140,10 @@ pub fn remove(
                 .is_some_and(|text| entries.iter().any(|entry| entry == text))
         });
         values.len() != before
+    })?;
+    Ok(Report {
+        command: "declarations remove",
+        ..changed
     })
 }
 

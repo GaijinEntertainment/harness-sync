@@ -134,6 +134,19 @@ fn an_entry_that_is_already_there_makes_no_commit() {
     assert_exit(&output, 0);
     assert!(text(&output.stdout).contains("nothing to change"));
     assert_eq!(remote.head("main"), head);
+    let (unchanged, _) = machine.harness_sync_json(&[
+        "declarations",
+        "add",
+        "exclude",
+        ".claude/settings.json:/model",
+    ]);
+    assert_eq!(unchanged["command"], "declarations add");
+    for command in ["add", "remove"] {
+        let (report, output) =
+            machine.harness_sync_json(&["declarations", command, "include", ".claude/hooks"]);
+        assert_exit(&output, 0);
+        assert_eq!(report["command"], format!("declarations {command}"));
+    }
 }
 
 #[test]
