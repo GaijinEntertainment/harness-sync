@@ -13,7 +13,16 @@ use crate::registry;
 use crate::report::UndeclaredMarketplace;
 
 /// Finds the commands that a synced item runs: each key path of a command string in `value`, with the command.
-pub type Commands = fn(id: &ItemId, value: &Value) -> Vec<(KeyPath, String)>;
+pub type Commands = fn(id: &ItemId, value: &Value) -> Vec<(KeyPath, Command)>;
+
+/// A command that a synced item runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    /// A line that the harness runs through a shell, such as a hook.
+    Shell(String),
+    /// A program that the harness starts without a shell, such as the `command` of an MCP server.
+    Program(String),
+}
 
 /// Finds the marketplaces that the harness records on this machine and that the local setup does not declare.
 pub type MarketplaceCheck = fn(
