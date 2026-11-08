@@ -181,9 +181,11 @@ pub struct ItemReport {
     pub id: String,
     /// How the item differs.
     pub state: ItemState,
-    /// The local value, with secrets masked.
+    /// The local value, with secrets masked, or `None` when the local setup does not hold the item.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub local: Option<Value>,
-    /// The remote value, with secrets masked.
+    /// The remote value, with secrets masked, or `None` when the remote snapshot does not hold the item.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub remote: Option<Value>,
 }
 

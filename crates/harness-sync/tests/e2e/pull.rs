@@ -58,7 +58,7 @@ fn pull_on_a_second_machine_writes_the_remote_keys() {
     let (status, _) = second.harness_sync_json(&["status"]);
     assert_eq!(
         status["items"],
-        json!([{"id": ".claude/settings.json:/model", "state": "local_change", "local": "opus", "remote": null}])
+        json!([{"id": ".claude/settings.json:/model", "state": "local_change", "local": "opus"}])
     );
 }
 
