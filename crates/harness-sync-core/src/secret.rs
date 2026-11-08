@@ -309,7 +309,7 @@ pub(crate) fn still_missing(
     missing
         .into_iter()
         .filter(|key| {
-            value_at_key(setup, key).is_none()
+            !has_value(setup, key)
                 && value_at_key(remote, key)
                     .is_some_and(|value| holds_placeholder(value, &mut key.clone()))
         })
@@ -334,6 +334,10 @@ fn holds_placeholder(value: &Value, key: &mut KeyPath) -> bool {
             .any(|(index, child)| child_holds(index.to_string(), child)),
         _ => false,
     }
+}
+
+pub(crate) fn has_value(items: &Items, key: &KeyPath) -> bool {
+    value_at_key(items, key).is_some()
 }
 
 fn value_at_key<'a>(items: &'a Items, key: &KeyPath) -> Option<&'a Value> {
