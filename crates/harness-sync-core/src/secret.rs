@@ -67,6 +67,7 @@ pub(crate) fn local_view(
     setup: &Items,
     missing: &BTreeSet<KeyPath>,
     declared: &[KeyPath],
+    base: &Items,
 ) -> Items {
     let mut view: Items = setup
         .iter()
@@ -81,7 +82,9 @@ pub(crate) fn local_view(
         })
         .collect();
     for key in missing {
-        fill(&mut view, key);
+        if let Some(value) = value_at_key(base, key) {
+            fill(&mut view, key, value.clone());
+        }
     }
     view
 }
@@ -109,16 +112,15 @@ fn mask(value: &mut Value, key: &mut KeyPath, secret: bool, declared: &[KeyPath]
     }
 }
 
-fn fill(view: &mut Items, key: &KeyPath) {
+fn fill(view: &mut Items, key: &KeyPath, base_value: Value) {
     let item = key.item();
-    let text = Value::String(placeholder(key));
     match (view.get_mut(&item), &key.path[item.path.len()..]) {
         (None, []) => {
-            view.insert(item, text);
+            view.insert(item, base_value);
         }
         (Some(value), [parents @ .., name]) => {
             if let Some(Value::Object(parent)) = value_at_mut(value, parents) {
-                parent.entry(name.clone()).or_insert(text);
+                parent.entry(name.clone()).or_insert(base_value);
             }
         }
         _ => {}
@@ -171,15 +173,18 @@ impl Restore<'_, '_> {
                 true
             }
             Value::Array(elements) => {
-                let mut index = 0;
-                elements.retain_mut(|child| {
+                let recorded = self.missing.len();
+                let whole = elements.iter_mut().enumerate().all(|(index, child)| {
                     self.key.path.push(index.to_string());
                     let keep = self.value(child, local.and_then(|l| l.get(index)));
                     self.key.path.pop();
-                    index += 1;
                     keep
                 });
-                true
+                if !whole && self.error.is_none() {
+                    self.missing.truncate(recorded);
+                    self.missing.push(self.key.clone());
+                }
+                whole
             }
             _ => true,
         }
@@ -306,10 +311,29 @@ pub(crate) fn still_missing(
         .filter(|key| {
             value_at_key(setup, key).is_none()
                 && value_at_key(remote, key)
-                    .and_then(Value::as_str)
-                    .is_some_and(|text| is_placeholder_of(text, key))
+                    .is_some_and(|value| holds_placeholder(value, &mut key.clone()))
         })
         .collect()
+}
+
+fn holds_placeholder(value: &Value, key: &mut KeyPath) -> bool {
+    let mut child_holds = |name: String, child: &Value| {
+        key.path.push(name);
+        let holds = holds_placeholder(child, key);
+        key.path.pop();
+        holds
+    };
+    match value {
+        Value::String(text) => is_placeholder_of(text, key),
+        Value::Object(entries) => entries
+            .iter()
+            .any(|(name, child)| child_holds(name.clone(), child)),
+        Value::Array(elements) => elements
+            .iter()
+            .enumerate()
+            .any(|(index, child)| child_holds(index.to_string(), child)),
+        _ => false,
+    }
 }
 
 fn value_at_key<'a>(items: &'a Items, key: &KeyPath) -> Option<&'a Value> {
@@ -507,7 +531,10 @@ mod tests {
             }}}
         }))
         .unwrap();
-        assert_eq!(local_view(&setup, &BTreeSet::new(), &[]), view);
+        assert_eq!(
+            local_view(&setup, &BTreeSet::new(), &[], &Items::new()),
+            view
+        );
     }
 
     #[test]
@@ -522,7 +549,7 @@ mod tests {
             key(".claude/settings.json:/pluginConfigs/p/options"),
         ];
 
-        let view = local_view(&setup, &BTreeSet::new(), &declared);
+        let view = local_view(&setup, &BTreeSet::new(), &declared, &Items::new());
 
         assert_eq!(
             view,
@@ -538,24 +565,53 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_secret_shows_its_placeholder_in_the_local_view() {
+    fn a_missing_secret_shows_its_base_value_in_the_local_view() {
         let setup = settings_items(json!({"pluginConfigs": {"p": {"options": {}}}})).unwrap();
+        let base = settings_items(json!({
+            "env": {"GITHUB_TOKEN": "<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>"},
+            "pluginConfigs": {"p": {"options": {
+                "apiToken": "<harness-sync secret .claude/settings.json:/pluginConfigs/p/options/apiToken>",
+                "args": ["--token", "<harness-sync secret .claude/settings.json:/pluginConfigs/p/options/args/1>"]
+            }}}
+        }))
+        .unwrap();
         let missing = BTreeSet::from([
             key(".claude/settings.json:/env/GITHUB_TOKEN"),
             key(".claude/settings.json:/pluginConfigs/p/options/apiToken"),
+            key(".claude/settings.json:/pluginConfigs/p/options/args"),
         ]);
 
-        let view = local_view(&setup, &missing, &[]);
+        let view = local_view(&setup, &missing, &[], &base);
+
+        assert_eq!(view, base);
+    }
+
+    #[test]
+    fn restore_leaves_out_an_array_that_holds_a_missing_secret() {
+        let id = key(".claude/settings.json:/pluginConfigs/p").item();
+        let remote = json!({
+            "url": "b",
+            "args": ["--token", "<harness-sync secret .claude/settings.json:/pluginConfigs/p/args/1>"],
+            "servers": [{"name": "s", "apiToken": "<harness-sync secret .claude/settings.json:/pluginConfigs/p/servers/0/apiToken>"}]
+        });
+
+        let restored = restore(&id, &remote, None, &mut |_| Ok(None)).unwrap();
 
         assert_eq!(
-            view,
-            settings_items(json!({
-                "env": {"GITHUB_TOKEN": "<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>"},
-                "pluginConfigs": {"p": {"options": {
-                    "apiToken": "<harness-sync secret .claude/settings.json:/pluginConfigs/p/options/apiToken>"
-                }}}
-            }))
-            .unwrap()
+            restored.value,
+            Some(json!({"url": "b", "servers": [{"name": "s"}]}))
+        );
+        assert_eq!(
+            restored.missing,
+            [
+                key(".claude/settings.json:/pluginConfigs/p/args"),
+                key(".claude/settings.json:/pluginConfigs/p/servers/0/apiToken")
+            ]
+        );
+        let remote_items = Items::from([(id, remote)]);
+        assert_eq!(
+            still_missing(restored.missing, &Items::new(), &remote_items).len(),
+            2
         );
     }
 

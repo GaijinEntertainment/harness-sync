@@ -57,11 +57,6 @@ impl Session {
         {
             undeclared_marketplaces.extend(check(paths, &local_setup, &declarations)?);
         }
-        let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
-        let mut local = secret::local_view(&local_setup, &missing_secrets, &declarations.secrets);
-        for value in local.values_mut() {
-            home::tokenize(value, &paths.home);
-        }
         let mut remote = setup::load_snapshot(
             storage.as_ref(),
             remote_commit.as_deref(),
@@ -83,6 +78,12 @@ impl Session {
         } else {
             remote.clone()
         };
+        let missing_secrets = secret::load_missing(&paths.missing_secrets_file())?;
+        let mut local =
+            secret::local_view(&local_setup, &missing_secrets, &declarations.secrets, &base);
+        for value in local.values_mut() {
+            home::tokenize(value, &paths.home);
+        }
         if cfg!(not(unix)) {
             files::carry_executable(&mut local, &[&base, &remote]);
         }
