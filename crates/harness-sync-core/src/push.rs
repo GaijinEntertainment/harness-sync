@@ -59,8 +59,9 @@ fn chosen_targets(config: &Config, to: &[String]) -> Result<Vec<String>> {
 }
 
 fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
+    let differences = session.differences();
     if session.remote_commit != session.base_commit {
-        return Ok((remote_ahead(session), None));
+        return Ok((remote_ahead(session, &differences), None));
     }
     let added = &session.config.harnesses_without_base;
     ensure!(
@@ -68,14 +69,17 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
         "this machine started to sync {} after its last pull: run `harness-sync pull` first",
         added.join(", ")
     );
-    let differences = session.differences();
     let pushed_items = differences
         .iter()
         .filter(|d| d.state != ItemState::Pinned)
         .count();
     if pushed_items == 0 {
-        let summary = "nothing to push: the local setup matches the remote snapshot".to_owned();
-        return Ok((report(session, &differences, summary), None));
+        let summary = if differences.is_empty() {
+            "nothing to push: the local setup matches the remote snapshot"
+        } else {
+            "nothing to push: only pinned items differ from the remote snapshot"
+        };
+        return Ok((report(session, &differences, summary.to_owned()), None));
     }
     let outgoing = session.outgoing();
     let remote = &session.three_way.remote;
@@ -92,7 +96,9 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
         .commit(session.remote_commit.as_deref(), &changes, &subject())?;
     match session.storage.publish(&commit)? {
         Publish::Published => {}
-        Publish::RemoteAhead if session.is_primary() => return Ok((remote_ahead(session), None)),
+        Publish::RemoteAhead if session.is_primary() => {
+            return Ok((remote_ahead(session, &differences), None));
+        }
         Publish::RemoteAhead => bail!(
             "the target got a commit during the push: run `harness-sync push --to {}` again",
             session.target
@@ -178,12 +184,12 @@ fn secrets_found(session: &Session, differences: &[Difference<'_>], found: &[Key
     }
 }
 
-fn remote_ahead(session: &Session) -> Report {
+fn remote_ahead(session: &Session, differences: &[Difference<'_>]) -> Report {
     Report {
         outcome: Outcome::RemoteAhead,
         ..report(
             session,
-            &[],
+            differences,
             "the remote snapshot has commits that this machine has not pulled: run `harness-sync pull` first"
                 .to_owned(),
         )
