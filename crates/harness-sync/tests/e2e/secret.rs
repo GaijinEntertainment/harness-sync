@@ -52,7 +52,6 @@ fn a_missing_secret_is_listed_and_is_not_a_local_deletion() {
     let missing = json!({
         "id": ".claude/settings.json:/env/GITHUB_TOKEN",
         "state": "secret_missing",
-        "local": null,
         "remote": PLACEHOLDER
     });
     assert_eq!(pulled["items"].as_array().unwrap().last(), Some(&missing));

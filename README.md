@@ -236,7 +236,6 @@ A report looks like this:
     {
       "id": ".claude/settings.json:/env/GITHUB_TOKEN",
       "state": "remote_change",
-      "local": null,
       "remote": "<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>"
     },
     {
@@ -250,8 +249,8 @@ A report looks like this:
 ```
 
 - `outcome` is `ok`, `conflicts`, `remote_ahead`, or `secrets_found`.
-- `state` is `local_change`, `remote_change`, `conflict`, `pinned`, or `secret_missing`. `null` means the side does not
-  hold the item.
+- `state` is `local_change`, `remote_change`, `conflict`, `pinned`, or `secret_missing`. An item leaves out `local` or
+  `remote` when that side does not hold it; `null` is a JSON `null` value.
 - `secrets_found` lists key paths when the scan blocks a push, `missing_executables` lists `{id, executable}` pairs
   after a pull, and `undeclared_marketplaces` lists `{name, declaration}` pairs from status and push for the
   marketplaces that do not sync and that the repo's `exclude` list does not cover. Each appears only when it holds

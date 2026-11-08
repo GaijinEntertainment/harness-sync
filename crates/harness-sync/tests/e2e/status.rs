@@ -20,7 +20,7 @@ fn status_before_init_asks_for_init() {
 fn status_against_an_empty_remote_lists_every_local_item_as_a_local_change() {
     let remote = Remote::new();
     let machine = Machine::new();
-    machine.write_settings(&json!({"effortLevel": "high", "env": {"A": "1"}}));
+    machine.write_settings(&json!({"effortLevel": "high", "env": {"A": "1"}, "model": null}));
     assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
 
     let (report, output) = machine.harness_sync_json(&["status"]);
@@ -30,8 +30,9 @@ fn status_against_an_empty_remote_lists_every_local_item_as_a_local_change() {
     assert_eq!(
         report["items"],
         json!([
-            {"id": ".claude/settings.json:/effortLevel", "state": "local_change", "local": "high", "remote": null},
-            {"id": ".claude/settings.json:/env/A", "state": "local_change", "local": "1", "remote": null}
+            {"id": ".claude/settings.json:/effortLevel", "state": "local_change", "local": "high"},
+            {"id": ".claude/settings.json:/env/A", "state": "local_change", "local": "1"},
+            {"id": ".claude/settings.json:/model", "state": "local_change", "local": null}
         ])
     );
 }
