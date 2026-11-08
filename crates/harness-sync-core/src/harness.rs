@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::declarations::Declarations;
-use crate::item::{ItemId, Items, KeyPath, is_within};
+use crate::item::{ItemId, Items, KeyPath, is_within, is_within_ignoring_case};
 use crate::paths::Paths;
 use crate::registry;
 use crate::report::UndeclaredMarketplace;
@@ -121,16 +121,16 @@ pub(crate) fn owner(file: &str) -> Option<&'static Harness> {
         .find(|harness| harness.roots.iter().any(|root| is_within(file, root.path)))
 }
 
-pub(crate) fn is_credentials(file: &str) -> bool {
-    all()
-        .iter()
-        .any(|harness| harness.credentials.contains(&file))
-}
-
-pub(crate) fn is_skipped_dir(dir: &str) -> bool {
-    all()
-        .iter()
-        .any(|harness| harness.skipped_dirs.contains(&dir))
+pub(crate) fn lists_as_never_whole(file: &str) -> bool {
+    all().iter().any(|harness| {
+        harness
+            .keyed_files
+            .iter()
+            .map(|keyed| keyed.path)
+            .chain(harness.credentials.iter().copied())
+            .chain(harness.skipped_dirs.iter().copied())
+            .any(|path| is_within_ignoring_case(file, path))
+    })
 }
 
 pub(crate) fn by_name(name: &str) -> Result<&'static Harness> {

@@ -37,9 +37,9 @@ static CLAUDE_CODE: Harness = Harness {
     ],
     files: &[],
     dirs: &[],
-    skipped_dirs: &[],
+    skipped_dirs: &[".claude/skills/synced"],
     never_referenced: &[".claude/plugins"],
-    credentials: &[],
+    credentials: &[".claude/.credentials.json"],
     commands: root_command,
     undeclared_marketplaces: None,
 };

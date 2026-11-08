@@ -8,6 +8,8 @@ use anyhow::{Context, Result};
 use crate::harness::{self, Root};
 use crate::item::is_within;
 
+pub(crate) const STATE_DIR: &str = ".harness-sync";
+
 /// The places on this machine.
 #[derive(Debug)]
 pub struct Paths {
@@ -45,7 +47,7 @@ impl Paths {
             .collect();
         Self {
             roots,
-            state_dir: home.join(".harness-sync"),
+            state_dir: home.join(STATE_DIR),
             home,
         }
     }

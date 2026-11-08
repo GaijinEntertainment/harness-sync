@@ -7,9 +7,9 @@ use serde_json::{Value, json};
 
 use crate::atomic;
 use crate::declarations::DECLARATIONS_FILE;
-use crate::harness::{self, Selection, keyed_file};
-use crate::item::{ItemId, Items, KeyPath};
-use crate::paths::Paths;
+use crate::harness::{self, Selection};
+use crate::item::{ItemId, Items, KeyPath, is_home_path, is_within_ignoring_case};
+use crate::paths::{Paths, STATE_DIR};
 use crate::setup::Backup;
 use crate::storage::{FileChange, Storage};
 use crate::{references, secret};
@@ -61,12 +61,25 @@ pub(crate) fn load_local(storage: &dyn Storage, paths: &Paths, files: &[String])
         .collect())
 }
 
+pub(crate) fn can_sync_whole(file: &str) -> bool {
+    let is_skipped_name = |name: &str| {
+        SKIPPED_NAMES
+            .iter()
+            .any(|skipped| name.eq_ignore_ascii_case(skipped))
+    };
+    is_home_path(file)
+        && !file.eq_ignore_ascii_case(DECLARATIONS_FILE)
+        && !is_within_ignoring_case(file, STATE_DIR)
+        && !harness::lists_as_never_whole(file)
+        && !file.split('/').any(is_skipped_name)
+}
+
 fn is_file_include(path: &KeyPath) -> bool {
-    path.path.is_empty() && keyed_file(&path.file).is_none() && !harness::is_credentials(&path.file)
+    path.path.is_empty() && can_sync_whole(&path.file)
 }
 
 fn walk(paths: &Paths, relative: &str, found: &mut Vec<String>) -> Result<()> {
-    if harness::is_skipped_dir(relative) {
+    if !can_sync_whole(relative) {
         return Ok(());
     }
     let dir = paths.local(relative);
@@ -83,16 +96,13 @@ fn walk(paths: &Paths, relative: &str, found: &mut Vec<String>) -> Result<()> {
         let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
         };
-        if SKIPPED_NAMES.contains(&name.as_str()) || name.contains('\n') {
-            continue;
-        }
         let path = format!("{relative}/{name}");
         let kind = entry
             .file_type()
             .with_context(|| format!("cannot read {}", entry.path().display()))?;
         if kind.is_dir() {
             walk(paths, &path, found)?;
-        } else if kind.is_file() {
+        } else if kind.is_file() && can_sync_whole(&path) {
             found.push(path);
         }
     }
@@ -130,10 +140,7 @@ fn is_snapshot_file(file: &str, include: &[KeyPath]) -> bool {
         || include
             .iter()
             .any(|path| is_file_include(path) && path.covers(file, &[]));
-    synced
-        && keyed_file(file).is_none()
-        && !harness::is_credentials(file)
-        && file != DECLARATIONS_FILE
+    synced && can_sync_whole(file)
 }
 
 pub(crate) fn changes(outgoing: &Items, remote: &Items, paths: &Paths) -> Result<Vec<FileChange>> {
@@ -265,4 +272,39 @@ fn set_executable(file: &Path, executable: bool) -> Result<()> {
 #[cfg(not(unix))]
 fn set_executable(_file: &Path, _executable: bool) -> Result<()> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_file_syncs_whole_only_outside_the_places_that_never_sync() {
+        for file in [".claude/rules/a.md", ".agents/skills/x/SKILL.md"] {
+            assert!(can_sync_whole(file), "{file}");
+        }
+        for file in [
+            ".claude/settings.json",
+            ".claude/.credentials.json",
+            ".harness-sync/config.toml",
+            "harness-sync.toml",
+            ".claude/skills/synced/x/SKILL.md",
+            "tools/node_modules/dep/index.js",
+            ".claude/rules/.DS_Store",
+            ".claude/rules/a:b.md",
+            ".claude/rules/a\\b.md",
+            ".claude/rules/a\rb.md",
+            "C:/x",
+            ".claude/../x",
+            ".HARNESS-SYNC/config.toml",
+            "Harness-Sync.toml",
+            ".claude/.CREDENTIALS.json",
+            ".claude/Settings.json",
+            ".claude/skills/Synced/x/SKILL.md",
+            "tools/NODE_MODULES/dep/index.js",
+            ".claude/rules/.ds_store",
+        ] {
+            assert!(!can_sync_whole(file), "{file}");
+        }
+    }
 }

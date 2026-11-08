@@ -4,7 +4,8 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::harness::{self, keyed_file};
+use crate::files;
+use crate::harness;
 use crate::item::{Items, is_within};
 use crate::paths::Paths;
 
@@ -90,8 +91,7 @@ fn resolve(paths: &Paths, raw: &str, base: Option<&Path>) -> Option<String> {
     let file = paths.home_path(&normal)?;
     let harness = harness::owner(&file)?;
     let allowed = paths.local(&file) == normal
-        && keyed_file(&file).is_none()
-        && !harness::is_credentials(&file)
+        && files::can_sync_whole(&file)
         && !harness
             .never_referenced
             .iter()
@@ -144,7 +144,15 @@ mod tests {
     fn a_path_resolves_inside_the_claude_directory_only() {
         let home = tempfile::tempdir().unwrap();
         let claude_dir = home.path().join(".claude");
-        for file in ["hooks/x.sh", "plugins/cache/p/run.sh", "rules/a.md"] {
+        for file in [
+            "hooks/x.sh",
+            "plugins/cache/p/run.sh",
+            "rules/a.md",
+            ".credentials.json",
+            "skills/synced/x/SKILL.md",
+            "rules/node_modules/x.md",
+            "rules/.DS_Store",
+        ] {
             let path = claude_dir.join(file);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(path, "x").unwrap();
@@ -160,10 +168,15 @@ mod tests {
             resolve(&paths, "../hooks/x.sh", Some(&claude_dir.join("rules"))).as_deref(),
             Some(".claude/hooks/x.sh")
         );
-        assert_eq!(
-            resolve(&paths, "~/.claude/plugins/cache/p/run.sh", None),
-            None
-        );
+        for never in [
+            "~/.claude/plugins/cache/p/run.sh",
+            "~/.claude/.credentials.json",
+            "~/.claude/skills/synced/x/SKILL.md",
+            "~/.claude/rules/node_modules/x.md",
+            "~/.claude/rules/.DS_Store",
+        ] {
+            assert_eq!(resolve(&paths, never, None), None, "{never}");
+        }
         assert_eq!(resolve(&paths, "~/outside.sh", None), None);
         assert_eq!(resolve(&paths, "~/.claude/hooks/absent.sh", None), None);
     }

@@ -257,7 +257,10 @@ impl Remote {
         } else {
             run(&["-C", &work_dir, "checkout", "--quiet", "--orphan", branch]);
         }
-        fs::write(work.join(path), content).expect("write the file to commit");
+        let file = work.join(path);
+        fs::create_dir_all(file.parent().expect("a committed file has a directory"))
+            .expect("create the directory of the file to commit");
+        fs::write(file, content).expect("write the file to commit");
         run(&["-C", &work_dir, "add", path]);
         run(&["-C", &work_dir, "commit", "--quiet", "-m", "add a file"]);
         run(&[
