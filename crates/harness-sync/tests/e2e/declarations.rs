@@ -58,6 +58,30 @@ fn an_exclude_entry_removes_the_items_that_the_repo_already_holds() {
 }
 
 #[test]
+fn an_exclude_entry_removes_a_key_of_a_harness_that_this_machine_does_not_sync() {
+    let remote = Remote::new();
+    remote.commit_file(
+        "main",
+        ".pi/agent/settings.json",
+        "{\"defaultModel\": \"opus\", \"theme\": \"dark\"}\n",
+    );
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+
+    let output = machine.harness_sync(&[
+        "declarations",
+        "add",
+        "exclude",
+        ".pi/agent/settings.json:/defaultModel",
+    ]);
+
+    assert_exit(&output, 0);
+    let settings: Value =
+        serde_json::from_str(&remote.show("main:.pi/agent/settings.json")).unwrap();
+    assert_eq!(settings, json!({"theme": "dark"}));
+}
+
+#[test]
 fn the_push_after_a_secret_declaration_masks_the_value_in_the_repo() {
     let remote = Remote::new();
     let machine = Machine::new();

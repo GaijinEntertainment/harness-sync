@@ -70,22 +70,27 @@ pub(crate) fn load_snapshot(
     declarations: &Declarations,
     selection: &Selection,
 ) -> Result<Items> {
-    let mut items = load_whole_snapshot(storage, commit, &declarations.include)?;
+    let keyed: Vec<&KeyedFile> = selection
+        .harnesses()
+        .flat_map(|harness| harness.keyed_files)
+        .collect();
+    let mut items = read_snapshot(storage, commit, &declarations.include, &keyed)?;
     items.retain(|id, _| selection.syncs(&id.file) && !declarations.excludes(id));
     Ok(items)
 }
 
-fn load_whole_snapshot(
+fn read_snapshot(
     storage: &dyn Storage,
     commit: Option<&str>,
     include: &[KeyPath],
+    keyed: &[&KeyedFile],
 ) -> Result<Items> {
     let Some(commit) = commit else {
         return Ok(Items::new());
     };
-    let paths: Vec<&str> = keyed_files().map(|keyed| keyed.path).collect();
+    let paths: Vec<&str> = keyed.iter().map(|keyed| keyed.path).collect();
     let mut items = files::load_snapshot(storage, commit, include)?;
-    for (keyed, content) in keyed_files().zip(storage.read_files(commit, &paths)?) {
+    for (keyed, content) in keyed.iter().zip(storage.read_files(commit, &paths)?) {
         if let Some(bytes) = content {
             let origin = format!("{commit}:{}", keyed.path);
             items.extend(parse(keyed, &bytes, Path::new(&origin), include)?);
@@ -130,7 +135,8 @@ pub(crate) fn excluded_removals(
     commit: Option<&str>,
     declarations: &Declarations,
 ) -> Result<Vec<FileChange>> {
-    let whole = load_whole_snapshot(storage, commit, &declarations.include)?;
+    let all_keyed: Vec<&KeyedFile> = keyed_files().collect();
+    let whole = read_snapshot(storage, commit, &declarations.include, &all_keyed)?;
     let (excluded, kept): (Items, Items) = whole
         .clone()
         .into_iter()
