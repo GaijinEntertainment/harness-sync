@@ -271,7 +271,9 @@ item.
 ## Limitations
 
 - The home directory in the content of an authored file is not rewritten; only JSON values get the home-path token.
-- Symlinks are skipped.
+- harness-sync never reads or writes through a symlink below the home directory, other than the directory that
+  `CLAUDE_CONFIG_DIR` or `PI_CODING_AGENT_DIR` names. A file behind one does not sync on that machine, such as each file
+  of a `~/.claude/skills/` that a dotfiles manager links, and the repo keeps it.
 - A file whose path holds `\`, `:`, or a line break does not sync.
 - An array or object that pull adds to a JSON file gets the formatting of the JSON editor, and an added array is written
   on one line.

@@ -243,6 +243,71 @@ fn include_adds_the_files_of_a_directory_but_never_a_file_that_never_syncs() {
     }
 }
 
+#[cfg(unix)]
+fn link(machine: &Machine, path: &str, target: &str) {
+    std::os::unix::fs::symlink(machine.home().join(target), machine.home().join(path)).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn push_skips_a_file_behind_a_symlink() {
+    let remote = Remote::new();
+    let machine = connected(&remote);
+    machine.write_file("dotfiles/skills/x/SKILL.md", "linked skill\n");
+    machine.write_file("dotfiles/settings.json", "{\"model\": \"opus\"}\n");
+    machine.write_file("dotfiles/linked.md", "linked rule\n");
+    machine.write_file("dotfiles/hooks/x.sh", "#!/bin/sh\n");
+    machine.write_file(".claude/rules/real.md", "Run [the hook](../hooks/x.sh).\n");
+    link(&machine, ".claude/skills", "dotfiles/skills");
+    link(&machine, ".claude/settings.json", "dotfiles/settings.json");
+    link(&machine, ".claude/rules/linked.md", "dotfiles/linked.md");
+    link(&machine, ".claude/hooks", "dotfiles/hooks");
+
+    let output = machine.harness_sync(&["push"]);
+
+    assert_exit(&output, 0);
+    let tree =
+        String::from_utf8_lossy(&remote.git(&["ls-tree", "-r", "--name-only", "main"]).stdout)
+            .into_owned();
+    assert_eq!(tree, ".claude/rules/real.md\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn pull_never_writes_through_a_symlink() {
+    let remote = Remote::new();
+    let first = connected(&remote);
+    first.write_settings(&json!({"model": "opus"}));
+    first.write_file(".claude/skills/x/SKILL.md", "skill\n");
+    assert_exit(&first.harness_sync(&["push"]), 0);
+    let second = connected(&remote);
+    second.write_file("dotfiles/settings.json", "{\"model\": \"sonnet\"}\n");
+    std::fs::create_dir_all(second.home().join("dotfiles/skills")).unwrap();
+    link(&second, ".claude/skills", "dotfiles/skills");
+    link(&second, ".claude/settings.json", "dotfiles/settings.json");
+
+    let (report, output) = second.harness_sync_json(&["pull"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(report["items"], json!([]));
+    assert_eq!(second.read_file("dotfiles/skills/x/SKILL.md"), None);
+    assert_eq!(
+        second.read_file("dotfiles/settings.json").as_deref(),
+        Some("{\"model\": \"sonnet\"}\n")
+    );
+    let secret = second.harness_sync_with_input(
+        &["secret", "set", ".claude/settings.json:/env/GITHUB_TOKEN"],
+        "ghp_e2eSecretValue0123456789abcdefABCDEF\n",
+    );
+    assert_exit(&secret, 1);
+    assert_eq!(
+        second.read_file("dotfiles/settings.json").as_deref(),
+        Some("{\"model\": \"sonnet\"}\n")
+    );
+    assert_exit(&second.harness_sync(&["push"]), 0);
+    assert_eq!(remote.show("main:.claude/skills/x/SKILL.md"), "skill\n");
+}
+
 #[test]
 fn pull_ignores_a_remote_file_that_never_syncs() {
     let remote = Remote::new();

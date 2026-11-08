@@ -62,12 +62,13 @@ impl Session {
         for value in local.values_mut() {
             home::tokenize(value, &paths.home);
         }
-        let remote = setup::load_snapshot(
+        let mut remote = setup::load_snapshot(
             storage.as_ref(),
             remote_commit.as_deref(),
             &declarations,
             &selection,
         )?;
+        remote.retain(|id, _| !paths.is_behind_symlink(&id.file));
         let base = if primary {
             let without_base = Selection::new(&config.harnesses_without_base)?;
             setup::load_snapshot(
@@ -77,7 +78,7 @@ impl Session {
                 &selection,
             )?
             .into_iter()
-            .filter(|(id, _)| !without_base.owns(&id.file))
+            .filter(|(id, _)| !without_base.owns(&id.file) && !paths.is_behind_symlink(&id.file))
             .collect()
         } else {
             remote.clone()

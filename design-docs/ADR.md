@@ -25,3 +25,4 @@ lost, and what would reopen it.
 - [1.14 Mirror the home directory in the repo, and name each item by its path](/design-docs/adr/1.14-repo-layout.md)
 - [1.15 Build a core crate, harness crates, and storage crates into one binary](/design-docs/adr/1.15-crate-structure.md)
 - [1.16 Reach the remote snapshot through a storage trait](/design-docs/adr/1.16-storage.md)
+- [1.17 Never follow a symlink below the home directory](/design-docs/adr/1.17-symlinks.md)

@@ -48,6 +48,7 @@ pub(crate) fn load_local(
     for keyed in selection
         .harnesses()
         .flat_map(|harness| harness.keyed_files)
+        .filter(|keyed| !paths.is_behind_symlink(keyed.path))
     {
         let path = paths.local(keyed.path);
         match fs::read(&path) {
@@ -156,6 +157,7 @@ pub(crate) fn write_local(
     file: &str,
     edits: &[Edit<'_>],
 ) -> Result<()> {
+    paths.ensure_no_symlink(file)?;
     let path = paths.local(file);
     let original = match fs::read_to_string(&path) {
         Ok(text) => Some(text),
