@@ -5,7 +5,7 @@ use std::io::ErrorKind;
 
 use anyhow::{Context, Result};
 use harness_sync_core::declarations::Declarations;
-use harness_sync_core::harness::{Harness, KeyedFile, Keys, Root};
+use harness_sync_core::harness::{Command, Harness, KeyedFile, Keys, Root};
 use harness_sync_core::item::{ItemId, Items, KeyPath};
 use harness_sync_core::paths::Paths;
 use harness_sync_core::report::UndeclaredMarketplace;
@@ -107,17 +107,21 @@ pub static HARNESS: Harness = Harness {
     undeclared_marketplaces: Some(undeclared_marketplaces),
 };
 
-fn commands(id: &ItemId, value: &Value) -> Vec<(KeyPath, String)> {
-    let mut commands = Vec::new();
+fn commands(id: &ItemId, value: &Value) -> Vec<(KeyPath, Command)> {
     match id.path.first().map(String::as_str) {
-        Some("statusLine" | "mcpServers") => push_command(&mut commands, id, &["command"], value),
-        Some("hooks") => hook_commands(&mut commands, id, value),
-        _ => {}
+        Some("statusLine") => command(id, &["command"], value, Command::Shell)
+            .into_iter()
+            .collect(),
+        Some("mcpServers") => command(id, &["command"], value, Command::Program)
+            .into_iter()
+            .collect(),
+        Some("hooks") => hook_commands(id, value),
+        _ => Vec::new(),
     }
-    commands
 }
 
-fn hook_commands(commands: &mut Vec<(KeyPath, String)>, id: &ItemId, hooks: &Value) {
+fn hook_commands(id: &ItemId, hooks: &Value) -> Vec<(KeyPath, Command)> {
+    let mut commands = Vec::new();
     let matchers = hooks
         .as_object()
         .into_iter()
@@ -136,19 +140,23 @@ fn hook_commands(commands: &mut Vec<(KeyPath, String)>, id: &ItemId, hooks: &Val
                 &position.to_string(),
                 "command",
             ];
-            push_command(commands, id, &path, hook);
+            commands.extend(command(id, &path, hook, Command::Shell));
         }
     }
+    commands
 }
 
-fn push_command(commands: &mut Vec<(KeyPath, String)>, id: &ItemId, path: &[&str], value: &Value) {
-    let Some(command) = value.get("command").and_then(Value::as_str) else {
-        return;
-    };
+fn command(
+    id: &ItemId,
+    path: &[&str],
+    value: &Value,
+    kind: fn(String) -> Command,
+) -> Option<(KeyPath, Command)> {
+    let command = value.get("command").and_then(Value::as_str)?;
     let mut key = id.key_path();
     key.path
         .extend(path.iter().map(|&segment| segment.to_owned()));
-    commands.push((key, command.to_owned()));
+    Some((key, kind(command.to_owned())))
 }
 
 fn undeclared_marketplaces(
@@ -190,7 +198,7 @@ mod tests {
 
     use super::*;
 
-    fn named(id: &ItemId, value: &Value) -> Vec<(String, String)> {
+    fn named(id: &ItemId, value: &Value) -> Vec<(String, Command)> {
         commands(id, value)
             .into_iter()
             .map(|(key, command)| (key.to_string(), command))
@@ -214,14 +222,17 @@ mod tests {
             ),
             [(
                 ".claude/settings.json:/statusLine/command".to_owned(),
-                "sh -c true".to_owned()
+                Command::Shell("sh -c true".to_owned())
             )]
         );
         assert_eq!(
-            named(&server, &json!({"command": "kartta"})),
+            named(
+                &server,
+                &json!({"command": "/Library/Application Support/kartta"})
+            ),
             [(
                 ".claude.json:/mcpServers/kartta/command".to_owned(),
-                "kartta".to_owned()
+                Command::Program("/Library/Application Support/kartta".to_owned())
             )]
         );
         assert_eq!(
@@ -229,11 +240,11 @@ mod tests {
             [
                 (
                     ".claude/settings.json:/hooks/Stop/0/hooks/0/command".to_owned(),
-                    "tool --flag".to_owned()
+                    Command::Shell("tool --flag".to_owned())
                 ),
                 (
                     ".claude/settings.json:/hooks/Stop/0/hooks/1/command".to_owned(),
-                    "~/.claude/hooks/x.sh".to_owned()
+                    Command::Shell("~/.claude/hooks/x.sh".to_owned())
                 ),
             ]
         );

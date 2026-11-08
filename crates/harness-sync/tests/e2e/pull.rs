@@ -16,6 +16,31 @@ fn pushed(remote: &Remote, settings: &Value) -> Machine {
 }
 
 #[test]
+fn pull_takes_the_command_of_an_mcp_server_as_one_program_path() {
+    let remote = Remote::new();
+    let first = Machine::new();
+    let dir = first.home().join("Application Support");
+    let servers = json!({"mcpServers": {
+        "present": {"command": dir.join("tool")},
+        "absent": {"command": dir.join("absent")}
+    }});
+    first.write_file(".claude.json", &servers.to_string());
+    assert_exit(&first.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&first.harness_sync(&["push"]), 0);
+    let second = connected(&remote, &json!({}));
+    second.write_file("Application Support/tool", "");
+
+    let (report, output) = second.harness_sync_json(&["pull"]);
+
+    assert_exit(&output, 0);
+    let absent = second.home().join("Application Support/absent");
+    assert_eq!(
+        report["missing_executables"],
+        json!([{"id": ".claude.json:/mcpServers/absent/command", "executable": absent}])
+    );
+}
+
+#[test]
 fn pull_on_a_second_machine_writes_the_remote_keys() {
     let remote = Remote::new();
     pushed(&remote, &json!({"effortLevel": "high", "env": {"A": "1"}}));

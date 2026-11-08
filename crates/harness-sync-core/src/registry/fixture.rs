@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use super::Registry;
-use crate::harness::{Harness, KeyedFile, Keys, Root};
+use crate::harness::{Command, Harness, KeyedFile, Keys, Root};
 use crate::item::{ItemId, KeyPath};
 
 pub(super) static REGISTRY: Registry = Registry {
@@ -61,11 +61,11 @@ static PI: Harness = Harness {
     undeclared_marketplaces: None,
 };
 
-fn root_command(id: &ItemId, value: &Value) -> Vec<(KeyPath, String)> {
+fn root_command(id: &ItemId, value: &Value) -> Vec<(KeyPath, Command)> {
     let Some(command) = value.get("command").and_then(Value::as_str) else {
         return Vec::new();
     };
     let mut key = id.key_path();
     key.path.push("command".to_owned());
-    vec![(key, command.to_owned())]
+    vec![(key, Command::Shell(command.to_owned()))]
 }

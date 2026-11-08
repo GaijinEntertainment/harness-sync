@@ -1,6 +1,6 @@
 //! The pi harness of harness-sync (ADR 1.13 holds its catalog).
 
-use harness_sync_core::harness::{Harness, KeyedFile, Keys, Root};
+use harness_sync_core::harness::{Command, Harness, KeyedFile, Keys, Root};
 use harness_sync_core::item::{ItemId, KeyPath};
 use serde_json::Value;
 
@@ -56,7 +56,7 @@ pub static HARNESS: Harness = Harness {
     undeclared_marketplaces: None,
 };
 
-fn commands(id: &ItemId, value: &Value) -> Vec<(KeyPath, String)> {
+fn commands(id: &ItemId, value: &Value) -> Vec<(KeyPath, Command)> {
     let is_server = id.file == MCP && id.path.first().is_some_and(|key| key == "mcpServers");
     let Some(command) = value
         .get("command")
@@ -67,5 +67,30 @@ fn commands(id: &ItemId, value: &Value) -> Vec<(KeyPath, String)> {
     };
     let mut key = id.key_path();
     key.path.push("command".to_owned());
-    vec![(key, command.to_owned())]
+    vec![(key, Command::Program(command.to_owned()))]
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn an_mcp_server_names_its_command_as_one_program() {
+        let server = ItemId::key(MCP, &["mcpServers", "kartta"]);
+        let settings = ItemId::key(".pi/agent/settings.json", &["defaultModel"]);
+        let value = json!({"command": "/Library/Application Support/kartta"});
+
+        assert_eq!(
+            commands(&server, &value),
+            [(
+                ".pi/agent/mcp.json:/mcpServers/kartta/command"
+                    .parse()
+                    .unwrap(),
+                Command::Program("/Library/Application Support/kartta".to_owned())
+            )]
+        );
+        assert_eq!(commands(&settings, &value), []);
+    }
 }

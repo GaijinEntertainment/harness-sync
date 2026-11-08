@@ -1,7 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-use crate::harness;
+use crate::harness::{self, Command};
 use crate::item::Items;
 use crate::report::MissingExecutable;
 
@@ -13,13 +13,16 @@ pub(crate) fn missing(setup: &Items, home: &Path) -> Vec<MissingExecutable> {
     commands(setup)
         .into_iter()
         .filter_map(|(id, command)| {
-            let executable = executable(&command)?;
+            let executable = match command {
+                Command::Shell(line) => executable(&line)?,
+                Command::Program(program) => program,
+            };
             (!is_installed(&executable, home)).then_some(MissingExecutable { id, executable })
         })
         .collect()
 }
 
-fn commands(setup: &Items) -> Vec<(String, String)> {
+fn commands(setup: &Items) -> Vec<(String, Command)> {
     setup
         .iter()
         .filter(|(id, _)| !id.is_whole_file())
