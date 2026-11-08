@@ -175,6 +175,46 @@ fn secret_set_fills_a_missing_secret_from_stdin() {
 }
 
 #[test]
+fn secret_set_reads_the_declarations_that_another_machine_pushed_after_the_last_fetch() {
+    let remote = Remote::new();
+    let machine = connected(&remote, &json!({"model": "opus"}));
+    remote.commit_file(
+        "main",
+        "harness-sync.toml",
+        "secrets = [\".claude/settings.json:/env/INTERNAL_URL\"]\n",
+    );
+
+    let output = machine.harness_sync_with_input(
+        &["secret", "set", ".claude/settings.json:/env/INTERNAL_URL"],
+        "https://build.internal/hook\n",
+    );
+
+    assert_exit(&output, 0);
+    assert_eq!(
+        machine.settings(),
+        json!({"model": "opus", "env": {"INTERNAL_URL": "https://build.internal/hook"}})
+    );
+}
+
+#[test]
+fn secret_set_takes_a_key_that_the_name_rule_matches_while_the_remote_is_unreachable() {
+    let remote = Remote::new();
+    let machine = connected(&remote, &json!({"model": "opus"}));
+    std::fs::remove_dir_all(remote.path()).unwrap();
+
+    let output = machine.harness_sync_with_input(
+        &["secret", "set", ".claude/settings.json:/env/GITHUB_TOKEN"],
+        "mine-value\n",
+    );
+
+    assert_exit(&output, 0);
+    assert_eq!(
+        machine.settings(),
+        json!({"model": "opus", "env": {"GITHUB_TOKEN": "mine-value"}})
+    );
+}
+
+#[test]
 fn secret_set_refuses_a_key_path_that_is_not_a_secret() {
     let remote = Remote::new();
     let machine = connected(&remote, &json!({"model": "opus"}));
