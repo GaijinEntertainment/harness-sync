@@ -1,6 +1,6 @@
 //! The `init` command, which connects this machine to its primary target.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
 use anyhow::{Context, Result, ensure};
@@ -40,7 +40,7 @@ pub fn run(paths: &Paths, name: &str, target: Target, harnesses: &[String]) -> R
             primary: name.to_owned(),
             harnesses: chosen_harnesses(paths, harnesses)?,
             harnesses_without_base: Vec::new(),
-            pins: Vec::new(),
+            pins: BTreeSet::new(),
             targets: BTreeMap::from([(name.to_owned(), target)]),
         },
     };
