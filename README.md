@@ -24,7 +24,8 @@ Each harness syncs on its own; harness-sync never moves a value from one harness
 - The plugin setup, as the settings entries above: `enabledPlugins`, `extraKnownMarketplaces`, and `pluginConfigs`.
   harness-sync runs no Claude Code command. After its next session starts, Claude Code clones each declared marketplace
   that it lacks and downloads the enabled plugins. A marketplace that settings do not declare does not sync: status
-  and push warn about it and show the entry to add to `extraKnownMarketplaces`.
+  and push warn about it, unless the repo's `exclude` list covers it, and show the entry to add to
+  `extraKnownMarketplaces`.
 
 Everything else stays on the machine: the rest of `~/.claude.json` (counters, caches, account data, the `projects`
 records), credentials, history, sessions, auto-memory, `skills/synced/`, the removed skills in `skills/.trash/`, the
@@ -253,7 +254,8 @@ A report looks like this:
   hold the item.
 - `secrets_found` lists key paths when the scan blocks a push, `missing_executables` lists `{id, executable}` pairs
   after a pull, and `undeclared_marketplaces` lists `{name, declaration}` pairs from status and push for the
-  marketplaces that do not sync. Each appears only when it holds entries.
+  marketplaces that do not sync and that the repo's `exclude` list does not cover. Each appears only when it holds
+  entries.
 - `pushes` lists `{target, outcome, commit, review, items}` for each target that a push reached; `review` holds
   the pushed `commit` and the `change_url` for a Gerrit target. The top-level `items`,
   `base_commit`, and `remote_commit` belong to the primary target; the `items` of another target list what the push
