@@ -180,8 +180,8 @@ function of harness-sync, not of a command.
 ### Conflict
 
 A supported item that changed both locally and in the remote snapshot since the base commit, to different values. Pull
-stops on it, and the operator picks the local or the remote value. Without a base commit, every item that differs is a
-conflict.
+stops on it, and the operator picks the local or the remote value. Without a base commit, every item that both sides
+hold with different values is a conflict.
 
 **Avoid:** difference (any item where the local value and the remote snapshot differ; status lists differences, and
 only some of them are conflicts); merge conflict (git's term for a clash of text lines; harness-sync compares items,
