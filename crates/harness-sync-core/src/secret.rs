@@ -49,8 +49,8 @@ pub(crate) fn placeholder(key: &KeyPath) -> String {
     format!("{PLACEHOLDER_PREFIX}{key}>")
 }
 
-pub(crate) fn is_placeholder(text: &str) -> bool {
-    text.starts_with(PLACEHOLDER_PREFIX) && text.ends_with('>')
+fn is_placeholder_of(text: &str, key: &KeyPath) -> bool {
+    text.starts_with(PLACEHOLDER_PREFIX) && text == placeholder(key)
 }
 
 fn is_secret_key(key: &str) -> bool {
@@ -160,7 +160,7 @@ struct Restore<'a, 'b> {
 impl Restore<'_, '_> {
     fn value(&mut self, value: &mut Value, local: Option<&Value>) -> bool {
         match value {
-            Value::String(text) if is_placeholder(text) => self.secret(value, local),
+            Value::String(text) if is_placeholder_of(text, &self.key) => self.secret(value, local),
             Value::Object(entries) => {
                 entries.retain(|name, child| {
                     self.key.path.push(name.clone());
@@ -244,7 +244,7 @@ pub fn redact(id: &ItemId, value: &Value) -> Value {
 
 fn scan_value(value: &Value, key: &mut KeyPath, found: &mut Vec<KeyPath>) {
     match value {
-        Value::String(text) if !is_placeholder(text) && looks_like_token(text) => {
+        Value::String(text) if looks_like_token(text) && !is_placeholder_of(text, key) => {
             found.push(key.clone());
         }
         Value::Object(entries) => {
@@ -307,7 +307,7 @@ pub(crate) fn still_missing(
             value_at_key(setup, key).is_none()
                 && value_at_key(remote, key)
                     .and_then(Value::as_str)
-                    .is_some_and(is_placeholder)
+                    .is_some_and(|text| is_placeholder_of(text, key))
         })
         .collect()
 }
@@ -447,6 +447,30 @@ mod tests {
                 key(".claude/settings.json:/env/NOTE"),
                 key(".claude/settings.json:/hooks/Stop/0/command")
             ]
+        );
+    }
+
+    #[test]
+    fn a_placeholder_of_another_key_path_is_plain_text() {
+        let items = settings_items(json!({"env": {
+            "NOTE": "<harness-sync secret x>ghp_0123456789abcdefghijABCDEFGHIJ012345>",
+            "COPY": "<harness-sync secret .claude/settings.json:/env/OTHER_TOKEN>"
+        }}))
+        .unwrap();
+        let copy = key(".claude/settings.json:/env/COPY");
+
+        let found = scan(&items);
+        let restored = restore(&copy.item(), &items[&copy.item()], None, &mut |_| {
+            panic!("plain text needs no secret")
+        })
+        .unwrap();
+
+        assert_eq!(found, [key(".claude/settings.json:/env/NOTE")]);
+        assert_eq!(
+            restored.value,
+            Some(json!(
+                "<harness-sync secret .claude/settings.json:/env/OTHER_TOKEN>"
+            ))
         );
     }
 

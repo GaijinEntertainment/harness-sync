@@ -143,7 +143,8 @@ off.
 ## Secrets
 
 Push replaces each secret string with a placeholder such as
-`<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>`, so the repo never holds the value. A string is a secret
+`<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>`, so the repo never holds the value. A placeholder counts
+only at the value whose item id it names; the same text anywhere else is a plain string. A string is a secret
 when a key on its path, in any case, is `Authorization` or ends with `_KEY`, `-KEY`, `APIKEY`, `TOKEN`, `SECRET`,
 `PASSWORD`, or `HEADERS`. The repo can declare more key paths; see
 [`harness-sync.toml`](#harness-synctoml).
