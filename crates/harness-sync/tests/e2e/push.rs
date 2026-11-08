@@ -56,5 +56,68 @@ fn push_from_a_machine_that_has_not_pulled_is_refused() {
 
     assert_exit(&output, 4);
     assert_eq!(report["outcome"], "remote_ahead");
+    assert_eq!(
+        report["items"],
+        json!([{"id": ".claude/settings.json:/effortLevel", "state": "conflict", "local": "low", "remote": "high"}])
+    );
     assert_eq!(remote.head("main"), head);
+}
+
+#[cfg(unix)]
+#[test]
+fn push_that_meets_a_commit_made_during_the_push_reports_its_items() {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    machine.write_settings(&json!({"effortLevel": "high"}));
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["push"]), 0);
+    assert!(remote.git(&["branch", "ahead", "main"]).status.success());
+    remote.commit_file("ahead", ".claude/rules/other.md", "Another machine.\n");
+    machine.write_file(
+        "hooks/pre-push",
+        &format!(
+            "#!/bin/sh\ngit --git-dir='{}' update-ref refs/heads/main refs/heads/ahead\n",
+            remote.url()
+        ),
+    );
+    machine.set_executable("hooks/pre-push");
+    let config = machine.read_file(".gitconfig").unwrap();
+    let hooks = machine.home().join("hooks");
+    machine.write_file(
+        ".gitconfig",
+        &format!("{config}[core]\n\thooksPath = {}\n", hooks.display()),
+    );
+    machine.write_settings(&json!({"effortLevel": "low"}));
+
+    let (report, output) = machine.harness_sync_json(&["push"]);
+
+    assert_exit(&output, 4);
+    assert_eq!(report["outcome"], "remote_ahead");
+    assert_eq!(
+        report["items"],
+        json!([{"id": ".claude/settings.json:/effortLevel", "state": "local_change", "local": "low", "remote": "high"}])
+    );
+    assert_eq!(remote.head("main"), remote.head("ahead"));
+}
+
+#[test]
+fn push_with_only_pinned_items_that_differ_says_so() {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    machine.write_settings(&json!({"model": "opus"}));
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["push"]), 0);
+    assert_exit(
+        &machine.harness_sync(&["pin", ".claude/settings.json:/model"]),
+        0,
+    );
+    machine.write_settings(&json!({"model": "sonnet"}));
+
+    let output = machine.harness_sync(&["push"]);
+
+    assert_exit(&output, 0);
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("nothing to push: only pinned items differ from the remote snapshot")
+    );
 }
