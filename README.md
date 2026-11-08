@@ -78,7 +78,7 @@ the pins of this machine), `repo.git` (a bare clone), `missing-secrets.toml`, an
 
 A machine reads and writes only the items of the harnesses it syncs. Push leaves the items of other harnesses in the
 repo as they are. A harness that a machine starts to sync after its last pull has no base commit until the next pull:
-push refuses, and pull treats each of its items that differs as a conflict.
+push refuses, and pull treats each of its items that both sides hold with different values as a conflict.
 
 ## Set up another machine
 
@@ -105,8 +105,8 @@ harness-sync target primary mirror
 harness-sync target remove mirror
 ```
 
-A new primary target has no base commit on this machine, so the first pull from it stops on each item that differs:
-settle them with `--prefer` or `--take`.
+A new primary target has no base commit on this machine, so the first pull from it stops on each item that both sides
+hold with different values: settle them with `--prefer` or `--take`.
 
 `harness-sync push --to mirror` sends to that target, and `--to all` sends to every target, the primary first. A target
 that is not the primary gets this machine's setup as its new snapshot, without a conflict check, and with the `secrets`,
