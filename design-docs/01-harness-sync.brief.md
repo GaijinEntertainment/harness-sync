@@ -2,8 +2,8 @@
 
 ## Motivation
 
-The user-level setup of agent harnesses moves to other machines by hand: when a machine is set up, and each time a
-global setting changes. The user runs Claude Code and pi; Codex and kensai-local come later. Each harness keeps its
+The user-level setup of harnesses moves to other machines by hand: when a machine is set up, and each time the setup
+changes. The user runs Claude Code and pi; Codex and kensai-local come later. Each harness keeps its
 setup in its own directory under the home directory, mixed with state that the harness writes for itself. As prior art,
 a colleague keeps a hand-maintained git repo with one folder per harness, folders for tools outside the harnesses, and
 an instruction file at the root.
@@ -33,8 +33,8 @@ an instruction file at the root.
 
 ## Non-goals
 
-- Interop between harnesses: moving or translating a setting from one harness to another. A shared file at the root is a
-  plain file; how a harness uses it is the user's setup.
+- Interop between harnesses: moving or translating a setting from one harness to another. A root file is a plain
+  file; how a harness uses it is the user's setup.
 - Automatic sync (watchers, hooks, schedules).
 - A master machine. All machines are equal.
 - Auto-memory and the data of third-party plugins, such as claude-mem.

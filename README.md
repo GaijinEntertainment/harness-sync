@@ -44,7 +44,7 @@ harness-sync reads and writes the Claude Code files in that directory, as Claude
 The credentials in `auth.json`, `mcp-auth.json`, and `models-store.json`, the sessions, the npm tree, and the caches
 stay on the machine. When `PI_CODING_AGENT_DIR` is set, harness-sync reads and writes the pi files in that directory.
 
-### Other files
+### Root files
 
 A file or directory under the home directory that no harness owns, such as `~/.agents/skills/`, syncs when the repo's
 `include` list names it; see [`harness-sync.toml`](#harness-synctoml).
@@ -148,12 +148,12 @@ Push replaces each secret string with a placeholder such as
 `<harness-sync secret .claude/settings.json:/env/GITHUB_TOKEN>`, so the repo never holds the value. A placeholder counts
 only at the value whose item id it names; the same text anywhere else is a plain string. A string is a secret
 when a key on its path, in any case, is `Authorization` or ends with `_KEY`, `-KEY`, `APIKEY`, `TOKEN`, `SECRET`,
-`PASSWORD`, or `HEADERS`. The repo can declare more key paths; see
+`PASSWORD`, or `HEADERS`. The repo can declare more secrets by item id; see
 [`harness-sync.toml`](#harness-synctoml).
 
 Before it commits, push scans the outgoing snapshot, authored files included, for token-like strings outside a
 placeholder, such as a GitHub, Anthropic, Slack, or AWS key or a private key block. A match stops the push with exit
-code 5 and lists the key paths in `secrets_found`. Reports never print a secret value.
+code 5 and lists their item ids in `secrets_found`. Reports never print a secret value.
 
 Pull keeps the value that this machine already has for each placeholder. When the machine has no value, pull asks for it
 on a terminal; without one, pull leaves the key out and lists it as `secret_missing`. A missing secret inside a JSON
@@ -198,7 +198,7 @@ include = [".claude/hooks", ".claude.json:/autoCompactEnabled"]
 exclude = [".claude/statusline-mac.sh", ".claude/settings.json:/model"]
 ```
 
-- `secrets` marks every string under each key path as a secret.
+- `secrets` marks every string under each item id as a secret.
 - `include` adds files, whole directories, and keys of the JSON files that sync key by key, such as `~/.claude.json`. A
   nested key in a key that the catalog leaves out, such as `.claude.json:/projects/~1work~1app/allowedTools`, syncs
   without the rest of that key. A file or directory that no harness owns syncs too, at its path under the home
@@ -208,7 +208,7 @@ exclude = [".claude/statusline-mac.sh", ".claude/settings.json:/model"]
 - `exclude` removes every item under each entry, on every machine. `harness-sync declarations add exclude` also removes
   those items from the repo in the same commit.
 
-A secret that a push sent before its key path was declared stays in the git history of the repo; the next push replaces
+A secret that a push sent before its item id was declared stays in the git history of the repo; the next push replaces
 it with a placeholder.
 
 ## Operating harness-sync from an agent
@@ -252,7 +252,7 @@ A report looks like this:
 - `outcome` is `ok`, `conflicts`, `remote_ahead`, or `secrets_found`.
 - `state` is `local_change`, `remote_change`, `conflict`, `pinned`, or `secret_missing`. An item leaves out `local` or
   `remote` when that side does not hold it; `null` is a JSON `null` value.
-- `secrets_found` lists key paths when the scan blocks a push, `missing_executables` lists `{id, executable}` pairs
+- `secrets_found` lists item ids when the scan blocks a push, `missing_executables` lists `{id, executable}` pairs
   after a pull, and `undeclared_marketplaces` lists `{name, declaration}` pairs from status and push for the
   marketplaces that do not sync and that the repo's `exclude` list does not cover. Each appears only when it holds
   entries.
@@ -273,8 +273,8 @@ directory, and for a JSON key the path, `:`, and a JSON pointer:
 - `.claude/rules/rust.md`
 
 The repo holds each file at the same path, so `.claude/settings.json` in the repo holds the synced keys of
-`~/.claude/settings.json`. A key path for `secret set` names a key of a JSON file, in the form of an item id, and can
-point deeper into an item.
+`~/.claude/settings.json`. The item id that `secret set` takes names a key of a JSON file and can point deeper into an
+item.
 
 ## Limitations
 

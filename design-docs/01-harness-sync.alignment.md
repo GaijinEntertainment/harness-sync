@@ -74,8 +74,8 @@ catalog; it has no list of harnesses. One machine is connected, and nothing is r
 
 - Which harnesses? → Claude Code and pi in the first release; Codex and kensai-local later (the user).
 - Interop between harnesses? → None; a root file is a plain file (the user).
-- Storage kinds? → git and Gerrit, as flavors of one git crate, behind a trait for later kinds (the user; Gerrit is too
-  small for its own crate).
+- Storage kinds? → git and Gerrit, as two storage kinds of one git crate, behind a trait for later kinds (the user;
+  Gerrit is too small for its own crate).
 - Run-time plugins? → No; everything compiles into one binary (the user).
 - A machine without a harness? → Its sync configuration lists its harnesses (the user).
 - Form of an item id → the home-relative path, plus `:` and a JSON pointer. A harness-prefixed form
