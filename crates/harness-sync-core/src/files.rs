@@ -25,17 +25,21 @@ pub(crate) fn catalog(
     let mut files = Vec::new();
     for harness in selection.harnesses() {
         for &file in harness.files {
-            if is_regular_file(&paths.local(file))? {
+            if is_regular_file(&paths.local(file))? && !paths.is_behind_symlink(file) {
                 files.push(file.to_owned());
             }
         }
-        for dir in harness.dirs {
+        for dir in harness
+            .dirs
+            .iter()
+            .filter(|dir| !paths.is_behind_symlink(dir))
+        {
             walk(paths, dir, &mut files)?;
         }
     }
-    let included = include
-        .iter()
-        .filter(|path| is_file_include(path) && selection.syncs(&path.file));
+    let included = include.iter().filter(|path| {
+        is_file_include(path) && selection.syncs(&path.file) && !paths.is_behind_symlink(&path.file)
+    });
     for included in included {
         if is_regular_file(&paths.local(&included.file))? {
             files.push(included.file.clone());
@@ -198,6 +202,7 @@ pub(crate) fn write_local(
         .collect();
     let mut contents = storage.read_contents(&blobs)?.into_iter();
     for (id, value) in writes {
+        paths.ensure_no_symlink(&id.file)?;
         let file = paths.local(&id.file);
         match fs::read(&file) {
             Ok(old) => backup.save(Path::new(&id.file), &old)?,

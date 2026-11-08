@@ -92,6 +92,7 @@ fn resolve(paths: &Paths, raw: &str, base: Option<&Path>) -> Option<String> {
     let harness = harness::owner(&file)?;
     let allowed = paths.local(&file) == normal
         && files::can_sync_whole(&file)
+        && !paths.is_behind_symlink(&file)
         && !harness
             .never_referenced
             .iter()

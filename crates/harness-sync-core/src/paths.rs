@@ -1,9 +1,10 @@
 //! The places on this machine: the home directory, the directory of each harness root, and the state directory of
 //! harness-sync.
 
+use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 
 use crate::harness::{self, Root};
 use crate::item::is_within;
@@ -14,8 +15,15 @@ pub(crate) const STATE_DIR: &str = ".harness-sync";
 #[derive(Debug)]
 pub struct Paths {
     pub(crate) home: PathBuf,
-    roots: Vec<(&'static str, PathBuf)>,
+    roots: Vec<RootDir>,
     pub(crate) state_dir: PathBuf,
+}
+
+#[derive(Debug)]
+struct RootDir {
+    path: &'static str,
+    dir: PathBuf,
+    home_or_env_dir: PathBuf,
 }
 
 impl Paths {
@@ -43,7 +51,14 @@ impl Paths {
         let roots = harness::all()
             .iter()
             .flat_map(|harness| harness.roots)
-            .map(|root| (root.path, root_dir(root, &home, &env)))
+            .map(|root| {
+                let env_dir = root.env.and_then(&env);
+                RootDir {
+                    path: root.path,
+                    dir: root_dir(root, &home, env_dir.as_deref()),
+                    home_or_env_dir: env_dir.unwrap_or_else(|| home.clone()),
+                }
+            })
             .collect();
         Self {
             roots,
@@ -55,19 +70,42 @@ impl Paths {
     /// The location on this machine of `file`, a path relative to the home directory.
     #[must_use]
     pub fn local(&self, file: &str) -> PathBuf {
-        let Some((root, dir)) = self.roots.iter().find(|(root, _)| is_within(file, root)) else {
+        let Some(root) = self.root_of(file) else {
             return self.home.join(file);
         };
-        file[root.len()..]
+        file[root.path.len()..]
             .strip_prefix('/')
-            .map_or_else(|| dir.clone(), |rest| dir.join(rest))
+            .map_or_else(|| root.dir.clone(), |rest| root.dir.join(rest))
+    }
+
+    pub(crate) fn is_behind_symlink(&self, file: &str) -> bool {
+        let top = self
+            .root_of(file)
+            .map_or(&self.home, |root| &root.home_or_env_dir);
+        self.local(file)
+            .ancestors()
+            .take_while(|path| path != top)
+            .any(|path| fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_symlink()))
+    }
+
+    pub(crate) fn ensure_no_symlink(&self, file: &str) -> Result<()> {
+        ensure!(
+            !self.is_behind_symlink(file),
+            "{} is a symlink or lies in a symlinked directory, and harness-sync never writes through a symlink",
+            self.local(file).display()
+        );
+        Ok(())
+    }
+
+    fn root_of(&self, file: &str) -> Option<&RootDir> {
+        self.roots.iter().find(|root| is_within(file, root.path))
     }
 
     pub(crate) fn home_path(&self, local: &Path) -> Option<String> {
         let (root, relative) = self
             .roots
             .iter()
-            .filter_map(|(root, dir)| Some((*root, dir, local.strip_prefix(dir).ok()?)))
+            .filter_map(|root| Some((root.path, &root.dir, local.strip_prefix(&root.dir).ok()?)))
             .max_by_key(|(_, dir, _)| dir.components().count())
             .map(|(root, _, relative)| (root, relative))
             .or_else(|| Some(("", local.strip_prefix(&self.home).ok()?)))?;
@@ -104,9 +142,9 @@ impl Paths {
     }
 }
 
-fn root_dir(root: &Root, home: &Path, env: &impl Fn(&str) -> Option<PathBuf>) -> PathBuf {
-    match root.env.and_then(env) {
-        Some(dir) if root.in_env_dir.is_empty() => dir,
+fn root_dir(root: &Root, home: &Path, env_dir: Option<&Path>) -> PathBuf {
+    match env_dir {
+        Some(dir) if root.in_env_dir.is_empty() => dir.to_path_buf(),
         Some(dir) => dir.join(root.in_env_dir),
         None => home.join(root.path),
     }
@@ -142,5 +180,28 @@ mod tests {
             Some(".agents/a.md")
         );
         assert_eq!(paths.home_path(Path::new("/etc/x")), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_below_the_home_or_the_moved_root_hides_the_files_behind_it() {
+        use std::os::unix::fs::symlink;
+
+        let home = tempfile::tempdir().unwrap();
+        let home = home.path();
+        fs::create_dir_all(home.join("dotfiles/skills")).unwrap();
+        fs::create_dir_all(home.join(".claude/rules")).unwrap();
+        symlink(home.join("dotfiles/skills"), home.join(".claude/skills")).unwrap();
+        symlink(home.join("dotfiles"), home.join("moved")).unwrap();
+        let paths = Paths::for_home(home);
+        let moved = Paths::new(home.to_path_buf(), |name| {
+            (name == "CLAUDE_CONFIG_DIR").then(|| home.join("moved"))
+        });
+
+        assert!(paths.is_behind_symlink(".claude/skills"));
+        assert!(paths.is_behind_symlink(".claude/skills/x/SKILL.md"));
+        assert!(!paths.is_behind_symlink(".claude/rules/a.md"));
+        assert!(!moved.is_behind_symlink(".claude/skills/x/SKILL.md"));
+        assert!(moved.is_behind_symlink("moved/x"));
     }
 }
