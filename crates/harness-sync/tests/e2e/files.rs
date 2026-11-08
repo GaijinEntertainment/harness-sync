@@ -208,17 +208,21 @@ fn exclude_removes_a_referenced_file_and_a_key_from_the_catalog() {
 }
 
 #[test]
-fn include_adds_the_files_of_a_directory_but_never_the_credentials() {
+fn include_adds_the_files_of_a_directory_but_never_a_file_that_never_syncs() {
     let remote = Remote::new();
     remote.commit_file(
         "main",
         "harness-sync.toml",
-        "include = [\".claude/hooks\", \".claude/.credentials.json\"]\n",
+        "include = [\".claude\", \".claude/.credentials.json\", \".harness-sync\", \
+         \"tools/node_modules/dep/index.js\", \"notes/.DS_Store\"]\n",
     );
     let first = connected(&remote);
+    first.write_settings(&json!({"model": "opus"}));
     first.write_file(".claude/hooks/a.sh", "a\n");
     first.write_file(".claude/hooks/nested/b.sh", "b\n");
     first.write_file(".claude/.credentials.json", "{}\n");
+    first.write_file("tools/node_modules/dep/index.js", "module.exports = 1;\n");
+    first.write_file("notes/.DS_Store", "finder\n");
     assert_exit(&first.harness_sync(&["pull"]), 0);
 
     let output = first.harness_sync(&["push"]);
@@ -226,8 +230,50 @@ fn include_adds_the_files_of_a_directory_but_never_the_credentials() {
     assert_exit(&output, 0);
     assert_eq!(remote.show("main:.claude/hooks/a.sh"), "a\n");
     assert_eq!(remote.show("main:.claude/hooks/nested/b.sh"), "b\n");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&remote.show("main:.claude/settings.json"))
+            .unwrap(),
+        json!({"model": "opus"})
+    );
     let tree =
         String::from_utf8_lossy(&remote.git(&["ls-tree", "-r", "--name-only", "main"]).stdout)
             .into_owned();
-    assert!(!tree.contains("credentials"), "tree: {tree}");
+    for never in ["credentials", ".harness-sync/", "node_modules", ".DS_Store"] {
+        assert!(!tree.contains(never), "{never} in tree: {tree}");
+    }
+}
+
+#[test]
+fn pull_ignores_a_remote_file_that_never_syncs() {
+    let remote = Remote::new();
+    remote.commit_file(
+        "main",
+        "harness-sync.toml",
+        "include = [\".harness-sync\", \".claude/.credentials.json\"]\n",
+    );
+    for file in [
+        ".harness-sync/config.toml",
+        ".claude/.credentials.json",
+        ".claude/rules/a:b.md",
+        ".claude/rules/a\\b.md",
+        ".claude/rules/node_modules/dep/index.js",
+    ] {
+        remote.commit_file("main", file, "from the remote\n");
+    }
+    let machine = connected(&remote);
+    let config = machine.read_file(".harness-sync/config.toml");
+
+    let (report, output) = machine.harness_sync_json(&["pull"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(report["items"], json!([]));
+    assert_eq!(machine.read_file(".harness-sync/config.toml"), config);
+    for file in [
+        ".claude/.credentials.json",
+        ".claude/rules/a:b.md",
+        ".claude/rules/a\\b.md",
+        ".claude/rules/node_modules/dep/index.js",
+    ] {
+        assert_eq!(machine.read_file(file), None, "{file}");
+    }
 }

@@ -94,6 +94,12 @@ pub(crate) fn is_within(file: &str, dir: &str) -> bool {
             .is_some_and(|rest| rest.starts_with('/'))
 }
 
+pub(crate) fn is_within_ignoring_case(file: &str, dir: &str) -> bool {
+    file.get(..dir.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(dir))
+        && matches!(file.as_bytes().get(dir.len()), None | Some(b'/'))
+}
+
 impl fmt::Display for ItemId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write_id(f, &self.file, &self.path)
@@ -136,15 +142,16 @@ fn write_id(f: &mut fmt::Formatter<'_>, file: &str, path: &[String]) -> fmt::Res
 }
 
 fn parse_id(text: &str) -> Result<(String, Vec<String>)> {
-    let pointer_start = text.match_indices(":/").map(|(at, _)| at).find(|&at| {
-        Path::new(&text[..at])
+    let (file, pointer) = text
+        .split_once(":/")
+        .map_or((text, None), |(file, pointer)| (file, Some(pointer)));
+    let is_json = || {
+        Path::new(file)
             .extension()
             .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
-    });
-    let (file, pointer) =
-        pointer_start.map_or((text, None), |at| (&text[..at], Some(&text[at + 2..])));
+    };
     ensure!(
-        is_home_path(file),
+        is_home_path(file) && (pointer.is_none() || is_json()),
         "`{text}` is not an item id; an item id is a path relative to the home directory, such as \
          `.claude/rules/NAME.md`, and for a JSON key the path, `:`, and a JSON pointer, such as \
          `.claude/settings.json:/env/NAME`"
@@ -158,8 +165,8 @@ fn parse_id(text: &str) -> Result<(String, Vec<String>)> {
     Ok((file.to_owned(), path))
 }
 
-fn is_home_path(file: &str) -> bool {
-    !file.contains('\\')
+pub(crate) fn is_home_path(file: &str) -> bool {
+    !file.contains(['\\', ':', '\n', '\r'])
         && !file.starts_with('~')
         && file
             .split('/')
@@ -358,12 +365,6 @@ mod tests {
         assert_eq!(id, ItemId::whole_file(".claude/skills/review/SKILL.md"));
         assert_eq!(id.to_string(), ".claude/skills/review/SKILL.md");
         assert!(id.names_an_item());
-        assert!(
-            ".claude/skills/a:/b.md"
-                .parse::<ItemId>()
-                .unwrap()
-                .is_whole_file()
-        );
     }
 
     #[test]
@@ -396,6 +397,11 @@ mod tests {
             ".claude/../x",
             ".claude//x",
             ".claude\\x",
+            "C:/x",
+            ".claude/a:b.md",
+            ".claude/skills/a:/b.md",
+            ".claude/a\nb.md",
+            ".claude/a\rb.md",
         ] {
             assert!(text.parse::<ItemId>().is_err(), "{text}");
         }

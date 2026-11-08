@@ -195,7 +195,9 @@ exclude = [".claude/statusline-mac.sh", ".claude/settings.json:/model"]
 - `secrets` marks every string under each key path as a secret.
 - `include` adds files, whole directories, and keys of the JSON files that sync key by key, such as
   `~/.claude.json`. A file or directory that no harness owns syncs too, at its path under the home directory. `include`
-  never adds a credentials file.
+  never adds a credentials file of a harness, `~/.claude/skills/synced/` or `~/.claude/skills/.trash/`, a file in
+  `~/.harness-sync/`, or a `node_modules` directory or `.DS_Store` file. A credentials file that no harness lists, such
+  as `~/.aws/credentials`, syncs when `include` names it.
 - `exclude` removes every item under each entry, on every machine. `harness-sync declarations add exclude` also removes
   those items from the repo in the same commit.
 
@@ -270,6 +272,7 @@ item.
 
 - The home directory in the content of an authored file is not rewritten; only JSON values get the home-path token.
 - Symlinks are skipped.
+- A file whose path holds `\`, `:`, or a line break does not sync.
 - An array or object that pull adds to a JSON file gets the formatting of the JSON editor, and an added array is written
   on one line.
 - On Windows the executable bit of a file comes from the remote snapshot.
