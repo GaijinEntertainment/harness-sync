@@ -148,6 +148,7 @@ fn a_token_outside_a_placeholder_blocks_the_push() {
         json!([".claude/settings.json:/env/NOTE"])
     );
     assert!(!String::from_utf8_lossy(&output.stdout).contains(TOKEN));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains(TOKEN));
     assert_eq!(remote.head("main"), None);
 }
 
@@ -166,6 +167,7 @@ fn secret_set_fills_a_missing_secret_from_stdin() {
 
     assert_exit(&output, 0);
     assert!(!String::from_utf8_lossy(&output.stdout).contains("mine-value"));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("mine-value"));
     assert_eq!(
         second.settings(),
         json!({"env": {"GITHUB_TOKEN": "mine-value"}})
