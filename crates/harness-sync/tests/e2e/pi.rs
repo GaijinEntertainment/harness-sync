@@ -66,7 +66,7 @@ fn pi_settings_providers_servers_and_files_move_and_its_state_stays() {
         PROVIDER_KEY,
         AUTH_VALUE,
         "lastChangelogVersion",
-        "dep/index.js",
+        "module.exports = 1;",
     ] {
         assert!(!objects.contains(private), "the repo holds {private}");
     }
