@@ -44,16 +44,18 @@ pub trait Storage: Debug {
     /// The latest commit of the target as the last fetch saw it, or `None` when the target holds no snapshot.
     fn head(&self) -> Result<Option<String>>;
 
-    /// The content of each file at `paths` in the snapshot of `commit`, or `None` for a path that it does not hold.
+    /// The content of each file at `paths` in the snapshot of `commit`, or `None` for a path that it does not hold:
+    /// one entry for each path, in the order of `paths`.
     fn read_files(&self, commit: &str, paths: &[&str]) -> Result<Vec<Option<Vec<u8>>>>;
 
     /// Every file in the snapshot of `commit`.
     fn list_files(&self, commit: &str) -> Result<Vec<SnapshotFile>>;
 
-    /// The content of each content id that a snapshot file carries, or `None` for an id that this machine lacks.
+    /// The content of each content id that a snapshot file carries, or `None` for an id that this machine lacks: one
+    /// entry for each id, in the order of `ids`.
     fn read_contents(&self, ids: &[String]) -> Result<Vec<Option<Vec<u8>>>>;
 
-    /// The content id that each local file would have in a snapshot.
+    /// The content id that each local file would have in a snapshot: one id for each file, in the order of `files`.
     fn content_ids(&self, files: &[PathBuf]) -> Result<Vec<String>>;
 
     /// Writes a commit of `changes` on `parent`, with `subject` as the first line of its message, and returns its id.
