@@ -128,6 +128,23 @@ fn a_harness_added_after_the_last_pull_has_no_base_until_the_next_pull() {
 }
 
 #[test]
+fn a_repo_file_of_a_harness_that_this_machine_does_not_sync_is_not_parsed() {
+    let remote = Remote::new();
+    remote.commit_file("main", ".pi/agent/settings.json", "{not json\n");
+    let machine = Machine::new();
+    machine.write_settings(&json!({"model": "opus"}));
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+
+    let pulled = machine.harness_sync(&["pull"]);
+    let pushed = machine.harness_sync(&["push"]);
+
+    assert_exit(&pulled, 0);
+    assert_exit(&pushed, 0);
+    assert!(remote.show("main:.claude/settings.json").contains("opus"));
+    assert_eq!(remote.show("main:.pi/agent/settings.json"), "{not json\n");
+}
+
+#[test]
 fn a_sync_configuration_without_its_harness_list_is_refused() {
     let remote = Remote::new();
     let machine = Machine::new();
