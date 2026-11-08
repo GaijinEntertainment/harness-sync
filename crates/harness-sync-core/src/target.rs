@@ -11,8 +11,10 @@ use crate::storage;
 ///
 /// # Errors
 ///
-/// Fails when another target has the name `name`, the storage kind is unknown, or the target cannot be fetched.
+/// Fails when the URL of `target` holds a password, another target has the name `name`, the storage kind is unknown,
+/// or the target cannot be fetched.
 pub fn add(paths: &Paths, name: &str, target: Target) -> Result<Report> {
+    target.ensure_no_password()?;
     let config_file = paths.config_file();
     let mut config = Config::load_connected(&config_file)?;
     if let Some(existing) = config.targets.get(name) {

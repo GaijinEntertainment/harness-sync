@@ -62,6 +62,23 @@ pub fn parse_target_name(text: &str) -> Result<String> {
     Ok(text.to_owned())
 }
 
+impl Target {
+    pub(crate) fn ensure_no_password(&self) -> Result<()> {
+        let has_password = self
+            .url
+            .split_once("://")
+            .and_then(|(_, rest)| rest.split('/').next())
+            .and_then(|authority| authority.rsplit_once('@'))
+            .is_some_and(|(user_info, _)| user_info.contains(':'));
+        ensure!(
+            !has_password,
+            "the URL of the target holds a password, and harness-sync prints target URLs; keep the password in a git \
+             credential helper"
+        );
+        Ok(())
+    }
+}
+
 impl Config {
     pub(crate) fn load_connected(path: &Path) -> Result<Self> {
         Self::load(path)?.context(
@@ -75,9 +92,14 @@ impl Config {
             Err(err) if err.kind() == ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err).with_context(|| format!("cannot read {}", path.display())),
         };
-        toml::from_str(&text)
-            .map(Some)
-            .with_context(|| format!("cannot parse {}", path.display()))
+        let config: Self =
+            toml::from_str(&text).with_context(|| format!("cannot parse {}", path.display()))?;
+        for (name, target) in &config.targets {
+            target
+                .ensure_no_password()
+                .with_context(|| format!("cannot use the target `{name}` of {}", path.display()))?;
+        }
+        Ok(Some(config))
     }
 
     pub(crate) fn primary(&self) -> Result<&Target> {
