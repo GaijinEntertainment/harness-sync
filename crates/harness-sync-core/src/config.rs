@@ -15,7 +15,6 @@ use crate::{atomic, storage};
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Config {
     pub(crate) primary: String,
-    #[serde(default)]
     pub(crate) harnesses: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) harnesses_without_base: Vec<String>,

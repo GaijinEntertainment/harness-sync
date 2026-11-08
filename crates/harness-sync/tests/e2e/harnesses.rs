@@ -126,3 +126,22 @@ fn a_harness_added_after_the_last_pull_has_no_base_until_the_next_pull() {
     assert_eq!(pushed["outcome"], "ok");
     assert!(remote.show("main:.claude/settings.json").contains("opus"));
 }
+
+#[test]
+fn a_sync_configuration_without_its_harness_list_is_refused() {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    let config = machine.read_file(".harness-sync/config.toml").unwrap();
+    let without_list: Vec<&str> = config
+        .lines()
+        .filter(|line| !line.starts_with("harnesses"))
+        .collect();
+    machine.write_file(".harness-sync/config.toml", &without_list.join("\n"));
+
+    let output = machine.harness_sync(&["status"]);
+
+    assert_exit(&output, 1);
+    let stderr = text(&output.stderr);
+    assert!(stderr.contains("missing field `harnesses`"), "{stderr}");
+}
