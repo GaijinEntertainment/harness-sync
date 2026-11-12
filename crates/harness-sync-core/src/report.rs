@@ -220,7 +220,7 @@ pub(crate) fn with_missing_secrets(summary: String, missing: usize) -> String {
         summary
     } else {
         format!(
-            "{summary}; {missing} secrets missing: set each with `harness-sync secret set <key path>`"
+            "{summary}; {missing} secrets missing: set each with `harness-sync secret set <item id>`"
         )
     }
 }
