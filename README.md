@@ -189,8 +189,9 @@ harness-sync declarations show
 ```
 
 The command rewrites the file and drops its comments. You can also edit the file in any clone of the repo, then
-`git commit` it and `git push` it to the target's branch, or to `refs/for/<branch>` for a Gerrit target.
-`harness-sync push` keeps the files that it does not manage. The file looks like this:
+`git commit` it and `git push` it to the target's branch, or to `refs/for/<branch>` for a Gerrit target. A change for a
+Gerrit target takes effect after you merge it. `harness-sync push` keeps the files that it does not manage. The file
+looks like this:
 
 ```toml
 secrets = [".claude/settings.json:/env/INTERNAL_WEBHOOK"]
