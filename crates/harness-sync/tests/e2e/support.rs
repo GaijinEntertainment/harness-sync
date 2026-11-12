@@ -31,6 +31,10 @@ impl Machine {
         self.home.path()
     }
 
+    pub(crate) fn expanded_home(&self) -> String {
+        self.home().to_string_lossy().replace('\\', "/")
+    }
+
     pub(crate) fn settings_file(&self) -> PathBuf {
         self.home().join(".claude/settings.json")
     }
