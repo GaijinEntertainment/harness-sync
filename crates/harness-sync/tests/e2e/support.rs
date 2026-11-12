@@ -31,6 +31,10 @@ impl Machine {
         self.home.path()
     }
 
+    pub(crate) fn expanded_home(&self) -> String {
+        self.home().to_string_lossy().replace('\\', "/")
+    }
+
     pub(crate) fn settings_file(&self) -> PathBuf {
         self.home().join(".claude/settings.json")
     }
@@ -64,31 +68,28 @@ impl Machine {
     }
 
     pub(crate) fn is_executable(&self, relative: &str) -> bool {
+        let file = self.home().join(relative);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            fs::metadata(self.home().join(relative))
-                .is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0)
+            fs::metadata(file).is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0)
         }
         #[cfg(not(unix))]
         {
-            let _ = relative;
+            let _ = file;
             false
         }
     }
 
     pub(crate) fn set_executable(&self, relative: &str) {
+        let file = self.home().join(relative);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(
-                self.home().join(relative),
-                fs::Permissions::from_mode(0o755),
-            )
-            .unwrap();
+            fs::set_permissions(file, fs::Permissions::from_mode(0o755)).unwrap();
         }
         #[cfg(not(unix))]
-        let _ = relative;
+        let _ = file;
     }
 
     pub(crate) fn backup_files(&self) -> Vec<String> {
@@ -132,6 +133,7 @@ impl Machine {
         .expect("run harness-sync")
     }
 
+    #[cfg(unix)]
     pub(crate) fn harness_sync_with_path(&self, path: &std::ffi::OsStr, args: &[&str]) -> Output {
         isolated(
             Command::new(env!("CARGO_BIN_EXE_harness-sync")),

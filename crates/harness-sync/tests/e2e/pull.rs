@@ -19,10 +19,10 @@ fn pushed(remote: &Remote, settings: &Value) -> Machine {
 fn pull_takes_the_command_of_an_mcp_server_as_one_program_path() {
     let remote = Remote::new();
     let first = Machine::new();
-    let dir = first.home().join("Application Support");
+    let dir = format!("{}/Application Support", first.home().display());
     let servers = json!({"mcpServers": {
-        "present": {"command": dir.join("tool")},
-        "absent": {"command": dir.join("absent")}
+        "present": {"command": format!("{dir}/tool")},
+        "absent": {"command": format!("{dir}/absent")}
     }});
     first.write_file(".claude.json", &servers.to_string());
     assert_exit(&first.harness_sync(&["init", &remote.url()]), 0);
@@ -33,7 +33,7 @@ fn pull_takes_the_command_of_an_mcp_server_as_one_program_path() {
     let (report, output) = second.harness_sync_json(&["pull"]);
 
     assert_exit(&output, 0);
-    let absent = second.home().join("Application Support/absent");
+    let absent = format!("{}/Application Support/absent", second.expanded_home());
     assert_eq!(
         report["missing_executables"],
         json!([{"id": ".claude.json:/mcpServers/absent/command", "executable": absent}])
@@ -178,9 +178,11 @@ fn pull_from_an_empty_remote_writes_nothing() {
 fn a_path_under_the_home_directory_follows_the_home_of_each_machine() {
     let remote = Remote::new();
     let first = Machine::new();
-    let command =
-        |machine: &Machine| format!("bash {}/.claude/statusline.sh", machine.home().display());
-    first.write_settings(&json!({"statusLine": {"type": "command", "command": command(&first)}}));
+    let command = |home: &str| format!("bash {home}/.claude/statusline.sh");
+    let native_home = first.home().to_string_lossy();
+    first.write_settings(
+        &json!({"statusLine": {"type": "command", "command": command(&native_home)}}),
+    );
     assert_exit(&first.harness_sync(&["init", &remote.url()]), 0);
     assert_exit(&first.harness_sync(&["push"]), 0);
     let second = connected(&remote, &json!({}));
@@ -193,7 +195,10 @@ fn a_path_under_the_home_directory_follows_the_home_of_each_machine() {
         snapshot["statusLine"]["command"],
         "bash <harness-sync home>/.claude/statusline.sh"
     );
-    assert_eq!(second.settings()["statusLine"]["command"], command(&second));
+    assert_eq!(
+        second.settings()["statusLine"]["command"],
+        command(&second.expanded_home())
+    );
     let (status, _) = first.harness_sync_json(&["status"]);
     assert_eq!(status["items"], json!([]));
 }

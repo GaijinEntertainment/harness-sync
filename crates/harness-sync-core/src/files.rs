@@ -209,10 +209,10 @@ pub(crate) fn write_local(
             Err(err) if err.kind() == ErrorKind::NotFound => {}
             Err(err) => return Err(err).with_context(|| format!("cannot read {}", file.display())),
         }
-        let Some(value) = value else {
+        if value.is_none() {
             fs::remove_file(&file).with_context(|| format!("cannot delete {}", file.display()))?;
             continue;
-        };
+        }
         let content = contents
             .next()
             .flatten()
@@ -221,7 +221,8 @@ pub(crate) fn write_local(
             fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
         }
         atomic::write(&file, &content)?;
-        set_executable(&file, is_marked_executable(value))?;
+        #[cfg(unix)]
+        set_executable(&file, value.is_some_and(is_marked_executable))?;
     }
     Ok(())
 }
@@ -261,7 +262,7 @@ fn is_executable(file: &Path) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_executable(_file: &Path) -> bool {
+const fn is_executable(_file: &Path) -> bool {
     false
 }
 
@@ -272,11 +273,6 @@ fn set_executable(file: &Path, executable: bool) -> Result<()> {
     let mode = if executable { 0o755 } else { 0o644 };
     fs::set_permissions(file, fs::Permissions::from_mode(mode))
         .with_context(|| format!("cannot set the mode of {}", file.display()))
-}
-
-#[cfg(not(unix))]
-fn set_executable(_file: &Path, _executable: bool) -> Result<()> {
-    Ok(())
 }
 
 #[cfg(test)]
