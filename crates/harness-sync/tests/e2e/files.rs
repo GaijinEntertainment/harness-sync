@@ -316,13 +316,17 @@ fn pull_ignores_a_remote_file_that_never_syncs() {
         "harness-sync.toml",
         "include = [\".harness-sync\", \".claude/.credentials.json\"]\n",
     );
+    let work_tree_can_hold = |file: &&str| cfg!(unix) || !file.contains([':', '\\']);
     for file in [
         ".harness-sync/config.toml",
         ".claude/.credentials.json",
         ".claude/rules/a:b.md",
         ".claude/rules/a\\b.md",
         ".claude/rules/node_modules/dep/index.js",
-    ] {
+    ]
+    .into_iter()
+    .filter(work_tree_can_hold)
+    {
         remote.commit_file("main", file, "from the remote\n");
     }
     let machine = connected(&remote);
