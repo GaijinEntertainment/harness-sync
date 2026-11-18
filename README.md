@@ -128,7 +128,9 @@ then push again. Each pull that changes a file first copies it into `~/.harness-
 file, pull changes only the synced values and leaves every other byte as it was.
 
 The repo can hold files that harness-sync does not manage, such as a `README.md` or the files of an earlier tool. Pull
-never writes one to the home directory. Status and push print a warning for each.
+never writes one to the home directory, and push keeps it. Status and push print a warning for each one that the repo
+still holds after the command. `harness-sync push --prune` removes them from the repo in the commit of that push, also
+when no item changed. The git history of the repo keeps a removed file.
 
 ## Conflicts
 
@@ -193,8 +195,8 @@ harness-sync declarations show
 
 The command rewrites the file and drops its comments. You can also edit the file in any clone of the repo, then
 `git commit` it and `git push` it to the target's branch, or to `refs/for/<branch>` for a Gerrit target. A change for a
-Gerrit target takes effect after you merge it. `harness-sync push` keeps the files that it does not manage. The file
-looks like this:
+Gerrit target takes effect after you merge it. `harness-sync push` keeps the files that it does not manage, unless you
+pass `--prune`. The file looks like this:
 
 ```toml
 secrets = [".claude/settings.json:/env/INTERNAL_WEBHOOK"]

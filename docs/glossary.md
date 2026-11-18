@@ -114,7 +114,8 @@ authoritative); remote (the git remote, which holds the snapshot but is not the 
 
 A file in the repo of a target that is not `harness-sync.toml`, that no harness owns, and that no `include` entry
 covers, such as a `README.md` or a file in the layout of an earlier tool. A file that never syncs, such as a
-credentials file, is also unmanaged. Pull never writes one to the home directory, and status and push warn about each.
+credentials file, is also unmanaged. Pull never writes one to the home directory, status and push warn about each, and
+`push --prune` removes them.
 
 **Avoid:** root file (a home file that `include` adds, which harness-sync does manage); stray file, dirty remote (a
 `README.md` that the user keeps in the repo is unmanaged and wanted); untracked file (git's name for a file outside

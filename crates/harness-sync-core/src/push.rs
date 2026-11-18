@@ -11,22 +11,24 @@ use crate::item::KeyPath;
 use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, Review, TargetPush, short_commit};
 use crate::session::Session;
-use crate::storage::Publish;
+use crate::storage::{FileChange, Publish};
 use crate::{files, secret, setup};
 
 /// Pushes to the primary target, or to the targets `to`, where `all` names every target. The push stops at the first
 /// target that refuses it.
 ///
+/// With `prune`, each push also removes the unmanaged files from the snapshot of its target.
+///
 /// # Errors
 ///
 /// Fails when this machine is not connected, a target does not exist, a harness was added after the last pull, or
 /// the storage fails.
-pub fn run(paths: &Paths, to: &[String]) -> Result<Report> {
+pub fn run(paths: &Paths, to: &[String], prune: bool) -> Result<Report> {
     let config = Config::load_connected(&paths.config_file())?;
     let mut pushed = Vec::new();
     for target in chosen_targets(&config, to)? {
         let (session, report, review) =
-            push_to(paths, &target).with_context(|| failure(&target, &pushed))?;
+            push_to(paths, &target, prune).with_context(|| failure(&target, &pushed))?;
         let stop = report.outcome != Outcome::Ok;
         pushed.push((session, report, review));
         if stop {
@@ -36,10 +38,15 @@ pub fn run(paths: &Paths, to: &[String]) -> Result<Report> {
     Ok(combine(pushed))
 }
 
-fn push_to(paths: &Paths, target: &str) -> Result<(Session, Report, Option<Review>)> {
+fn push_to(paths: &Paths, target: &str, prune: bool) -> Result<(Session, Report, Option<Review>)> {
     let session = Session::open_target(paths, Some(target))?;
-    let (mut report, review) = push(paths, &session)?;
-    report.unmanaged_files = session.unmanaged_files()?;
+    let unmanaged = session.unmanaged_files()?;
+    let pruned = if prune { unmanaged.as_slice() } else { &[] };
+    let (mut report, review) = push(paths, &session, pruned)?;
+    let snapshot_stayed = report.remote_commit == session.remote_commit;
+    if pruned.is_empty() || snapshot_stayed {
+        report.unmanaged_files = unmanaged;
+    }
     Ok((session, report, review))
 }
 
@@ -79,7 +86,7 @@ fn chosen_targets(config: &Config, to: &[String]) -> Result<Vec<String>> {
     Ok(names)
 }
 
-fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
+fn push(paths: &Paths, session: &Session, pruned: &[String]) -> Result<(Report, Option<Review>)> {
     let differences = session.differences();
     if session.remote_commit != session.base_commit {
         return Ok((remote_ahead(session, &differences), None));
@@ -94,7 +101,7 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
         .iter()
         .filter(|d| d.state != ItemState::Pinned)
         .count();
-    if pushed_items == 0 {
+    if pushed_items == 0 && pruned.is_empty() {
         let summary = if differences.is_empty() {
             "nothing to push: the local setup matches the remote snapshot"
         } else {
@@ -112,6 +119,12 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
     if !found.is_empty() {
         return Ok((secrets_found(session, &differences, &found), None));
     }
+    changes.extend(
+        pruned
+            .iter()
+            .map(|path| FileChange::Delete { path: path.clone() }),
+    );
+    let sent = sent(pushed_items, pruned.len());
     let commit = session
         .storage
         .commit(session.remote_commit.as_deref(), &changes, &subject())?;
@@ -126,7 +139,7 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
         ),
         Publish::SentForReview { change_url } => {
             let summary = format!(
-                "sent {pushed_items} items for review as {}; the snapshot moves after the change merges",
+                "sent {sent} for review as {}; the snapshot moves after the change merges",
                 change_url
                     .as_deref()
                     .unwrap_or_else(|| short_commit(&commit))
@@ -138,14 +151,19 @@ fn push(paths: &Paths, session: &Session) -> Result<(Report, Option<Review>)> {
     if session.is_primary() {
         session.storage.set_base(&commit)?;
     }
-    let summary = format!(
-        "pushed {pushed_items} items as commit {}",
-        short_commit(&commit)
-    );
+    let summary = format!("pushed {sent} as commit {}", short_commit(&commit));
     let mut pushed = report(session, &differences, summary);
     pushed.base_commit = Some(commit.clone());
     pushed.remote_commit = Some(commit);
     Ok((pushed, None))
+}
+
+fn sent(items: usize, pruned: usize) -> String {
+    if pruned == 0 {
+        format!("{items} items")
+    } else {
+        format!("{items} items and the removal of {pruned} unmanaged files")
+    }
 }
 
 fn combine(pushed: Vec<(Session, Report, Option<Review>)>) -> Report {

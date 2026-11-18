@@ -319,25 +319,40 @@ impl Git {
 }
 
 fn write_change(change: &FileChange, stream: &mut Vec<u8>) -> Result<()> {
-    let (FileChange::Write { path, .. } | FileChange::Delete { path }) = change;
-    ensure!(
-        !path.contains('\n') && !path.starts_with('"'),
-        "cannot store the path {path:?} in the remote snapshot"
-    );
     match change {
         FileChange::Write {
+            path,
             content,
             executable,
-            ..
         } => {
+            ensure!(
+                !path.contains('\n') && !path.starts_with('"'),
+                "cannot store the path {path:?} in the remote snapshot"
+            );
             let mode = if *executable { "100755" } else { "100644" };
             stream.extend(format!("M {mode} inline {path}\ndata {}\n", content.len()).as_bytes());
             stream.extend(content);
             stream.push(b'\n');
         }
-        FileChange::Delete { .. } => stream.extend(format!("D {path}\n").as_bytes()),
+        FileChange::Delete { path } => {
+            stream.extend(format!("D {}\n", quoted(path)).as_bytes());
+        }
     }
     Ok(())
+}
+
+// constraint: git fast-import reads a path in double quotes as a C-style string, which can hold a line break
+fn quoted(path: &str) -> String {
+    let mut quoted = String::from('"');
+    for character in path.chars() {
+        match character {
+            '\n' => quoted.push_str("\\n"),
+            '"' | '\\' => quoted.extend(['\\', character]),
+            _ => quoted.push(character),
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 fn parse_batch(mut stream: &[u8], count: usize) -> Result<Vec<Option<Vec<u8>>>> {
