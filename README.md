@@ -70,6 +70,9 @@ harness-sync init git@github.com:you/agent-setup.git
 harness-sync push
 ```
 
+When the branch already holds a commit, such as a `README.md` that the git host added, push refuses with exit code 4:
+run `harness-sync pull` first, then push.
+
 `init` takes `--branch` when the snapshot should live on a branch other than `main`, and `--name` to name the repo
 something other than `origin`; see [Targets](#targets). It syncs each harness whose directory exists on the machine;
 `--harness claude-code` names the harnesses instead, and `harness-sync harness add|remove|list` changes the list later.
