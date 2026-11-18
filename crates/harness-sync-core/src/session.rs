@@ -117,6 +117,14 @@ impl Session {
         self.target == self.config.primary
     }
 
+    pub(crate) fn unmanaged_files(&self) -> Result<Vec<String>> {
+        files::unmanaged(
+            self.storage.as_ref(),
+            self.remote_commit.as_deref(),
+            &self.declarations.include,
+        )
+    }
+
     pub(crate) fn differences(&self) -> Vec<Difference<'_>> {
         let mut differences = self.three_way.differences();
         for difference in &mut differences {

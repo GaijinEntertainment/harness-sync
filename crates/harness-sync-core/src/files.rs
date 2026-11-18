@@ -147,6 +147,28 @@ fn is_snapshot_file(file: &str, include: &[KeyPath]) -> bool {
     synced && can_sync_whole(file)
 }
 
+pub(crate) fn unmanaged(
+    storage: &dyn Storage,
+    commit: Option<&str>,
+    include: &[KeyPath],
+) -> Result<Vec<String>> {
+    let Some(commit) = commit else {
+        return Ok(Vec::new());
+    };
+    Ok(storage
+        .list_files(commit)?
+        .into_iter()
+        .map(|file| file.path)
+        .filter(|file| !is_managed(file, include))
+        .collect())
+}
+
+fn is_managed(file: &str, include: &[KeyPath]) -> bool {
+    file == DECLARATIONS_FILE
+        || harness::keyed_file(file).is_some()
+        || is_snapshot_file(file, include)
+}
+
 pub(crate) fn changes(outgoing: &Items, remote: &Items, paths: &Paths) -> Result<Vec<FileChange>> {
     let mut changes = Vec::new();
     for (id, value) in outgoing.iter().filter(|(id, _)| id.is_whole_file()) {
@@ -306,6 +328,32 @@ mod tests {
             ".claude/rules/.ds_store",
         ] {
             assert!(!can_sync_whole(file), "{file}");
+        }
+    }
+
+    #[test]
+    fn a_snapshot_file_is_managed_when_a_harness_or_the_repo_lists_hold_it() {
+        let include = [".agents/skills".parse::<KeyPath>().unwrap()];
+
+        for file in [
+            "harness-sync.toml",
+            ".claude/settings.json",
+            ".claude.json",
+            ".claude/rules/a.md",
+            ".pi/agent/models.json",
+            ".agents/skills/x/SKILL.md",
+        ] {
+            assert!(is_managed(file, &include), "{file}");
+        }
+        for file in [
+            "README.md",
+            "settings.json",
+            "files/CLAUDE.md",
+            ".agents/other.md",
+            ".claude/.credentials.json",
+            ".claude/rules/node_modules/dep/index.js",
+        ] {
+            assert!(!is_managed(file, &include), "{file}");
         }
     }
 }

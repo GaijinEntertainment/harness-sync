@@ -70,3 +70,60 @@ fn status_reports_a_settings_file_that_is_not_json() {
         text(&output.stderr)
     );
 }
+
+#[test]
+fn status_lists_and_warns_about_each_unmanaged_file_of_the_remote_snapshot() {
+    let remote = Remote::new();
+    remote.commit_file("main", "harness-sync.toml", "include = [\".agents\"]\n");
+    remote.commit_file("main", ".agents/skills/a.md", "a skill\n");
+    remote.commit_file("main", ".pi/agent/models.json", "{}\n");
+    remote.commit_file("main", ".claude/settings.json", "{}\n");
+    remote.commit_file("main", "README.md", "About this repo.\n");
+    remote.commit_file("main", "files/CLAUDE.md", "old layout\n");
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+
+    let (report, _) = machine.harness_sync_json(&["status"]);
+    let output = machine.harness_sync(&["status"]);
+
+    assert_eq!(
+        report["unmanaged_files"],
+        json!(["README.md", "files/CLAUDE.md"])
+    );
+    assert_exit(&output, 0);
+    let stderr = text(&output.stderr);
+    for file in ["README.md", "files/CLAUDE.md"] {
+        assert!(
+            stderr.contains(&format!(
+                "warning: the remote snapshot holds {file}, which harness-sync does not manage"
+            )),
+            "stderr: {stderr}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_line_break_in_an_unmanaged_path_does_not_start_a_warning_line() {
+    let remote = Remote::new();
+    remote.commit_file("main", "a\nwarning: forged", "x\n");
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+
+    let output = machine.harness_sync(&["status"]);
+
+    assert_exit(&output, 0);
+    let stderr = text(&output.stderr);
+    assert!(
+        stderr.contains("holds a\\nwarning: forged, which"),
+        "stderr: {stderr}"
+    );
+    assert_eq!(
+        stderr
+            .lines()
+            .filter(|line| line.starts_with("warning:"))
+            .count(),
+        1,
+        "stderr: {stderr}"
+    );
+}
