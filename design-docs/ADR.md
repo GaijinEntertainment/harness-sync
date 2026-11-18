@@ -26,3 +26,4 @@ lost, and what would reopen it.
 - [1.15 Build a core crate, harness crates, and storage crates into one binary](/design-docs/adr/1.15-crate-structure.md)
 - [1.16 Reach the remote snapshot through a storage trait](/design-docs/adr/1.16-storage.md)
 - [1.17 Never follow a symlink below the home directory](/design-docs/adr/1.17-symlinks.md)
+- [1.18 Keep unmanaged files in the repo, warn about them, and remove them only on request](/design-docs/adr/1.18-unmanaged-files.md)

@@ -73,6 +73,9 @@ enum Command {
         /// Target to send to instead of the primary, or `all`; repeat it for several targets
         #[arg(long = "to", value_name = "TARGET")]
         to: Vec<String>,
+        /// Also remove from the snapshot each file that harness-sync does not manage
+        #[arg(long)]
+        prune: bool,
     },
     /// Apply the remote snapshot to the local setup
     Pull {
@@ -230,7 +233,7 @@ fn execute(cli: &Cli) -> Result<Report> {
             harnesses,
         } => init::run(&paths, name, target(remote, branch, *gerrit), harnesses),
         Command::Status => status::run(&paths),
-        Command::Push { to } => push::run(&paths, to),
+        Command::Push { to, prune } => push::run(&paths, to, *prune),
         Command::Pull { prefer, takes } => pull::run(
             &paths,
             &Choices {
