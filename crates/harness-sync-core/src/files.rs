@@ -233,6 +233,7 @@ pub(crate) fn write_local(
         }
         if value.is_none() {
             fs::remove_file(&file).with_context(|| format!("cannot delete {}", file.display()))?;
+            paths.remove_empty_dirs_above(&id.file);
             continue;
         }
         let content = contents

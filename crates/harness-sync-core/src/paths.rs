@@ -97,6 +97,17 @@ impl Paths {
         Ok(())
     }
 
+    pub(crate) fn remove_empty_dirs_above(&self, file: &str) {
+        let top = self.root_of(file).map_or(&self.home, |root| &root.dir);
+        let above = self.local(file);
+        for dir in above.ancestors().skip(1).take_while(|dir| dir != top) {
+            // ignored: a directory that still holds a file, or that cannot be removed, stays
+            if fs::remove_dir(dir).is_err() {
+                break;
+            }
+        }
+    }
+
     fn root_of(&self, file: &str) -> Option<&RootDir> {
         self.roots.iter().find(|root| is_within(file, root.path))
     }

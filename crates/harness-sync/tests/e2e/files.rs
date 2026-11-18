@@ -108,6 +108,71 @@ fn a_file_deleted_on_one_machine_is_deleted_on_the_other() {
 }
 
 #[test]
+fn pull_removes_each_directory_that_a_deleted_file_leaves_empty() {
+    let remote = Remote::new();
+    let first = connected(&remote);
+    first.write_file(".claude/skills/a/references/deep.md", "deep\n");
+    first.write_file(".claude/skills/b/SKILL.md", "b\n");
+    first.write_file(".claude/commands/only.md", "only\n");
+    assert_exit(&first.harness_sync(&["push"]), 0);
+    let second = connected(&remote);
+    assert_exit(&second.harness_sync(&["pull"]), 0);
+    second.write_file(".claude/skills/b/notes/.DS_Store", "local\n");
+    for file in [
+        "skills/a/references/deep.md",
+        "skills/b/SKILL.md",
+        "commands/only.md",
+    ] {
+        std::fs::remove_file(first.home().join(".claude").join(file)).unwrap();
+    }
+    assert_exit(&first.harness_sync(&["push"]), 0);
+
+    assert_exit(&second.harness_sync(&["pull"]), 0);
+
+    let exists = |dir: &str| second.home().join(dir).exists();
+    assert!(!exists(".claude/skills/a"));
+    assert!(!exists(".claude/commands"));
+    assert!(exists(".claude/skills/b/notes/.DS_Store"));
+    assert!(exists(".claude"));
+}
+
+#[test]
+fn pull_keeps_the_harness_directory_when_its_last_file_is_deleted() {
+    let remote = Remote::new();
+    let first = connected(&remote);
+    first.write_file(".claude/CLAUDE.md", "# Me\n");
+    assert_exit(&first.harness_sync(&["push"]), 0);
+    let second = connected(&remote);
+    assert_exit(&second.harness_sync(&["pull"]), 0);
+    std::fs::remove_file(first.home().join(".claude/CLAUDE.md")).unwrap();
+    assert_exit(&first.harness_sync(&["push"]), 0);
+
+    assert_exit(&second.harness_sync(&["pull"]), 0);
+
+    assert_eq!(second.read_file(".claude/CLAUDE.md"), None);
+    assert!(second.home().join(".claude").is_dir());
+}
+
+#[test]
+fn pull_removes_the_empty_directories_of_a_deleted_root_file_up_to_the_home_directory() {
+    let remote = Remote::new();
+    remote.commit_file("main", "harness-sync.toml", "include = [\".agents\"]\n");
+    let first = connected(&remote);
+    assert_exit(&first.harness_sync(&["pull"]), 0);
+    first.write_file(".agents/skills/a.md", "a skill\n");
+    assert_exit(&first.harness_sync(&["push"]), 0);
+    let second = connected(&remote);
+    assert_exit(&second.harness_sync(&["pull"]), 0);
+    std::fs::remove_file(first.home().join(".agents/skills/a.md")).unwrap();
+    assert_exit(&first.harness_sync(&["push"]), 0);
+
+    assert_exit(&second.harness_sync(&["pull"]), 0);
+
+    assert!(!second.home().join(".agents").exists());
+    assert!(second.home().join(".gitconfig").is_file());
+}
+
+#[test]
 fn a_repo_file_outside_the_harness_directories_never_reaches_the_home_directory() {
     let remote = Remote::new();
     remote.commit_file("main", "README.md", "About this repo.\n");
