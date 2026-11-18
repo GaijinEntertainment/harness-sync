@@ -62,6 +62,18 @@ fn warn(report: &Report) {
             );
         }
     }
+    let holds_unmanaged = !report.unmanaged_files.is_empty()
+        || report
+            .pushes
+            .iter()
+            .any(|push| !push.unmanaged_files.is_empty());
+    if holds_unmanaged {
+        // ignored: a warning that cannot reach stderr has no other channel
+        let _ = writeln!(
+            stderr,
+            "`harness-sync push --prune` removes the unmanaged files from the snapshot of each target that it sends to"
+        );
+    }
 }
 
 pub(crate) fn can_prompt(no_input: bool) -> bool {

@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::support::{Machine, Remote, assert_exit};
+use crate::support::{Machine, Remote, assert_exit, text};
 
 #[test]
 fn push_to_an_empty_remote_creates_the_first_remote_snapshot() {
@@ -136,6 +136,118 @@ fn push_lists_the_unmanaged_files_of_the_remote_snapshot_and_keeps_them() {
     assert_exit(&output, 0);
     assert_eq!(report["unmanaged_files"], json!(["README.md"]));
     assert_eq!(remote.show("main:README.md"), "About this repo.\n");
+}
+
+#[test]
+fn push_with_prune_removes_only_the_unmanaged_files() {
+    let remote = Remote::new();
+    remote.commit_file("main", "harness-sync.toml", "include = [\".agents\"]\n");
+    remote.commit_file("main", ".agents/skills/a.md", "a skill\n");
+    remote.commit_file("main", ".pi/agent/models.json", "{}\n");
+    remote.commit_file("main", "README.md", "About this repo.\n");
+    remote.commit_file("main", "files/CLAUDE.md", "old layout\n");
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["pull"]), 0);
+    machine.write_settings(&json!({"effortLevel": "high"}));
+
+    let (report, output) = machine.harness_sync_json(&["push", "--prune"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(report.get("unmanaged_files"), None);
+    let kept = text(&remote.git(&["ls-tree", "-r", "--name-only", "main"]).stdout);
+    assert_eq!(
+        kept.lines().collect::<Vec<_>>(),
+        [
+            ".agents/skills/a.md",
+            ".claude/settings.json",
+            ".pi/agent/models.json",
+            "harness-sync.toml"
+        ]
+    );
+    let (status, _) = machine.harness_sync_json(&["status"]);
+    assert_eq!(status["items"], json!([]));
+    assert_eq!(status.get("unmanaged_files"), None);
+}
+
+#[test]
+fn push_with_prune_and_no_changed_item_still_removes_the_unmanaged_files() {
+    let remote = Remote::new();
+    remote.commit_file("main", "README.md", "About this repo.\n");
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["pull"]), 0);
+
+    let pruned = machine.harness_sync(&["push", "--prune"]);
+    let head = remote.head("main");
+    let again = machine.harness_sync(&["push", "--prune"]);
+
+    assert_exit(&pruned, 0);
+    assert!(
+        text(&pruned.stdout).contains("pushed 0 items and the removal of 1 unmanaged files"),
+        "stdout: {}",
+        text(&pruned.stdout)
+    );
+    assert!(
+        !remote
+            .git(&["cat-file", "-e", "main:README.md"])
+            .status
+            .success()
+    );
+    assert_exit(&again, 0);
+    assert_eq!(remote.head("main"), head);
+}
+
+#[test]
+fn push_with_prune_is_refused_when_the_remote_is_ahead() {
+    let remote = Remote::new();
+    remote.commit_file("main", "README.md", "About this repo.\n");
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    let head = remote.head("main");
+
+    let (report, output) = machine.harness_sync_json(&["push", "--prune"]);
+
+    assert_exit(&output, 4);
+    assert_eq!(report["unmanaged_files"], json!(["README.md"]));
+    assert_eq!(remote.head("main"), head);
+}
+
+#[test]
+fn push_that_keeps_unmanaged_files_names_the_prune_flag() {
+    let remote = Remote::new();
+    remote.commit_file("main", "README.md", "About this repo.\n");
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["pull"]), 0);
+
+    let kept = machine.harness_sync(&["push"]);
+    let pruned = machine.harness_sync(&["push", "--prune"]);
+
+    assert!(
+        text(&kept.stderr).contains("`harness-sync push --prune` removes the unmanaged files"),
+        "stderr: {}",
+        text(&kept.stderr)
+    );
+    assert_eq!(text(&pruned.stderr), "");
+}
+
+#[cfg(unix)]
+#[test]
+fn push_with_prune_removes_a_file_whose_path_git_must_quote() {
+    let remote = Remote::new();
+    remote.commit_file("main", "line\nbreak.md", "x\n");
+    remote.commit_file("main", "\"quoted\".md", "x\n");
+    remote.commit_file("main", "back\\slash.md", "x\n");
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["pull"]), 0);
+
+    let output = machine.harness_sync(&["push", "--prune"]);
+
+    assert_exit(&output, 0);
+    let kept = text(&remote.git(&["ls-tree", "-r", "--name-only", "main"]).stdout);
+    assert_eq!(kept, "");
 }
 
 #[test]
