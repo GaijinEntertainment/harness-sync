@@ -295,6 +295,13 @@ impl Remote {
 }
 
 fn isolated(mut command: Command, home: &Path) -> Command {
+    // constraint: a git hook or `git rebase --exec` exports GIT_DIR and its relatives, which aim git at the repo
+    // that runs the tests
+    for (name, _) in std::env::vars_os() {
+        if name.to_string_lossy().starts_with("GIT_") {
+            command.env_remove(name);
+        }
+    }
     command
         .env("HOME", home)
         .env("USERPROFILE", home)
