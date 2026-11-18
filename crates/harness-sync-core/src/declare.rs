@@ -211,6 +211,7 @@ fn publish(repo: &Repo, key: &str, commit: String) -> Result<(String, TargetPush
         commit: Some(commit.clone()),
         review: None,
         items: Vec::new(),
+        unmanaged_files: Vec::new(),
     };
     let summary = match repo.storage.publish(&commit)? {
         Publish::SentForReview { change_url } => {

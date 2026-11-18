@@ -121,3 +121,48 @@ fn push_with_only_pinned_items_that_differ_says_so() {
             .contains("nothing to push: only pinned items differ from the remote snapshot")
     );
 }
+
+#[test]
+fn push_lists_the_unmanaged_files_of_the_remote_snapshot_and_keeps_them() {
+    let remote = Remote::new();
+    remote.commit_file("main", "README.md", "About this repo.\n");
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(&machine.harness_sync(&["pull"]), 0);
+    machine.write_settings(&json!({"effortLevel": "high"}));
+
+    let (report, output) = machine.harness_sync_json(&["push"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(report["unmanaged_files"], json!(["README.md"]));
+    assert_eq!(remote.show("main:README.md"), "About this repo.\n");
+}
+
+#[test]
+fn push_to_another_target_lists_the_unmanaged_files_of_that_target() {
+    let primary = Remote::new();
+    let mirror = Remote::new();
+    mirror.commit_file("main", "README.md", "About the mirror.\n");
+    let machine = Machine::new();
+    machine.write_settings(&json!({"effortLevel": "high"}));
+    assert_exit(&machine.harness_sync(&["init", &primary.url()]), 0);
+    assert_exit(
+        &machine.harness_sync(&["target", "add", "mirror", &mirror.url()]),
+        0,
+    );
+
+    let (report, output) = machine.harness_sync_json(&["push", "--to", "all"]);
+
+    assert_exit(&output, 0);
+    assert_eq!(report.get("unmanaged_files"), None);
+    assert_eq!(report["pushes"][0].get("unmanaged_files"), None);
+    assert_eq!(report["pushes"][1]["unmanaged_files"], json!(["README.md"]));
+    let again = machine.harness_sync(&["push", "--to", "mirror"]);
+    assert!(
+        String::from_utf8_lossy(&again.stderr).contains(
+            "warning: the snapshot of the target `mirror` holds README.md, which harness-sync does not manage"
+        ),
+        "stderr: {}",
+        String::from_utf8_lossy(&again.stderr)
+    );
+}

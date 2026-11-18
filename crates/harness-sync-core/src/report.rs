@@ -56,6 +56,9 @@ pub struct Report {
     /// The marketplaces that do not sync, because the settings do not declare them.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub undeclared_marketplaces: Vec<UndeclaredMarketplace>,
+    /// The repo paths of the unmanaged files in the remote snapshot of the primary target.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unmanaged_files: Vec<String>,
     /// The targets of this machine, for `target list`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub targets: Vec<TargetReport>,
@@ -84,6 +87,7 @@ impl Report {
             secrets_found: Vec::new(),
             missing_executables: Vec::new(),
             undeclared_marketplaces: Vec::new(),
+            unmanaged_files: Vec::new(),
             targets: Vec::new(),
             harnesses: Vec::new(),
             pushes: Vec::new(),
@@ -132,6 +136,9 @@ pub struct TargetPush {
     /// The items that the push replaced on a target other than the primary.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub items: Vec<ItemReport>,
+    /// The repo paths of the unmanaged files in the snapshot of a target other than the primary.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unmanaged_files: Vec<String>,
 }
 
 /// The lists of `harness-sync.toml` of a target.

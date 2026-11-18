@@ -28,6 +28,7 @@ pub fn run(paths: &Paths) -> Result<Report> {
             .map(ItemReport::from)
             .chain(missing.iter().map(ItemReport::secret_missing))
             .collect(),
+        unmanaged_files: session.unmanaged_files()?,
         undeclared_marketplaces: session.undeclared_marketplaces,
         base_commit: session.base_commit,
         remote_commit: session.remote_commit,
