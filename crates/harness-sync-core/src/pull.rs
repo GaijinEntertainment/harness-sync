@@ -11,7 +11,7 @@ use crate::harness::keyed_files;
 use crate::item::{ItemId, Items, KeyPath};
 use crate::json_edit::Edit;
 use crate::paths::Paths;
-use crate::report::{ItemReport, Outcome, Report, with_missing_secrets};
+use crate::report::{ItemReport, Outcome, Report, counted, with_missing_secrets};
 use crate::session::Session;
 use crate::setup::Backup;
 use crate::{executables, files, home, secret, setup};
@@ -116,7 +116,8 @@ pub fn run(paths: &Paths, choices: &Choices<'_>, prompts: Option<&dyn Prompts>) 
         .count();
     if unresolved > 0 {
         let summary = format!(
-            "{unresolved} conflicts, nothing written: choose a side with --take ITEM=local|remote or --prefer local|remote"
+            "{}, nothing written: choose a side with --take ITEM=local|remote or --prefer local|remote",
+            counted(unresolved, "conflict")
         );
         return Ok(report(&session, &differences, Outcome::Conflicts, summary));
     }
@@ -135,8 +136,9 @@ pub fn run(paths: &Paths, choices: &Choices<'_>, prompts: Option<&dyn Prompts>) 
         .count();
     let summary = with_missing_secrets(
         format!(
-            "applied {} remote changes; {kept_local} local changes remain for `harness-sync push`",
-            from_remote.len()
+            "applied {}; {} left for `harness-sync push`",
+            counted(from_remote.len(), "remote change"),
+            counted(kept_local, "local change")
         ),
         missing.len(),
     );

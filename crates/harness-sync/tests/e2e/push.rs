@@ -184,7 +184,7 @@ fn push_with_prune_and_no_changed_item_still_removes_the_unmanaged_files() {
 
     assert_exit(&pruned, 0);
     assert!(
-        text(&pruned.stdout).contains("pushed 0 items and the removal of 1 unmanaged files"),
+        text(&pruned.stdout).contains("pushed 0 items and the removal of 1 unmanaged file "),
         "stdout: {}",
         text(&pruned.stdout)
     );
