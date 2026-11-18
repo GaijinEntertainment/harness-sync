@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::compare::{Difference, ItemState};
 use crate::paths::Paths;
-use crate::report::{ItemReport, Report, with_missing_secrets};
+use crate::report::{ItemReport, Report, counted, with_missing_secrets};
 use crate::secret;
 use crate::session::Session;
 
@@ -42,10 +42,10 @@ fn summary(differences: &[Difference<'_>]) -> String {
     }
     let count = |state| differences.iter().filter(|d| d.state == state).count();
     format!(
-        "{} local changes, {} remote changes, {} conflicts, {} pinned",
-        count(ItemState::LocalChange),
-        count(ItemState::RemoteChange),
-        count(ItemState::Conflict),
+        "{}, {}, {}, {} pinned",
+        counted(count(ItemState::LocalChange), "local change"),
+        counted(count(ItemState::RemoteChange), "remote change"),
+        counted(count(ItemState::Conflict), "conflict"),
         count(ItemState::Pinned)
     )
 }

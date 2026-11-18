@@ -9,7 +9,7 @@ use crate::compare::{Difference, ItemState};
 use crate::config::{ALL_TARGETS, Config};
 use crate::item::KeyPath;
 use crate::paths::Paths;
-use crate::report::{ItemReport, Outcome, Report, Review, TargetPush, short_commit};
+use crate::report::{ItemReport, Outcome, Report, Review, TargetPush, counted, short_commit};
 use crate::session::Session;
 use crate::storage::{FileChange, Publish};
 use crate::{files, secret, setup};
@@ -159,10 +159,14 @@ fn push(paths: &Paths, session: &Session, pruned: &[String]) -> Result<(Report, 
 }
 
 fn sent(items: usize, pruned: usize) -> String {
+    let items = counted(items, "item");
     if pruned == 0 {
-        format!("{items} items")
+        items
     } else {
-        format!("{items} items and the removal of {pruned} unmanaged files")
+        format!(
+            "{items} and the removal of {}",
+            counted(pruned, "unmanaged file")
+        )
     }
 }
 

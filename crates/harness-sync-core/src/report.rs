@@ -227,8 +227,17 @@ pub(crate) fn with_missing_secrets(summary: String, missing: usize) -> String {
         summary
     } else {
         format!(
-            "{summary}; {missing} secrets missing: set each with `harness-sync secret set <item id>`"
+            "{summary}; {} missing: set each with `harness-sync secret set <item id>`",
+            counted(missing, "secret")
         )
+    }
+}
+
+pub(crate) fn counted(count: usize, noun: &str) -> String {
+    if count == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{count} {noun}s")
     }
 }
 
