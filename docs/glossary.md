@@ -110,6 +110,16 @@ of the primary target. Secret placeholders stand for secrets, and a home-path to
 **Avoid:** backup (implies a one-way restore, but every machine pushes); master copy (no machine and no copy is
 authoritative); remote (the git remote, which holds the snapshot but is not the snapshot).
 
+### Unmanaged file
+
+A file in the repo of a target that is not `harness-sync.toml`, that no harness owns, and that no `include` entry
+covers, such as a `README.md` or a file in the layout of an earlier tool. A file that never syncs, such as a
+credentials file, is also unmanaged. Pull never writes one to the home directory, and status and push warn about each.
+
+**Avoid:** root file (a home file that `include` adds, which harness-sync does manage); stray file, dirty remote (a
+`README.md` that the user keeps in the repo is unmanaged and wanted); untracked file (git's name for a file outside
+the index, but git tracks these files).
+
 ### Base commit
 
 The remote snapshot commit of the primary target that this machine last reconciled its setup with. A pull can keep

@@ -43,6 +43,25 @@ fn warn(report: &Report) {
             undeclared.name, undeclared.name, undeclared.declaration
         );
     }
+    for file in &report.unmanaged_files {
+        // ignored: a warning that cannot reach stderr has no other channel
+        let _ = writeln!(
+            stderr,
+            "warning: the remote snapshot holds {}, which harness-sync does not manage",
+            file.escape_debug()
+        );
+    }
+    for push in &report.pushes {
+        for file in &push.unmanaged_files {
+            // ignored: a warning that cannot reach stderr has no other channel
+            let _ = writeln!(
+                stderr,
+                "warning: the snapshot of the target `{}` holds {}, which harness-sync does not manage",
+                push.target,
+                file.escape_debug()
+            );
+        }
+    }
 }
 
 pub(crate) fn can_prompt(no_input: bool) -> bool {

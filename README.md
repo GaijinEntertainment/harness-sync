@@ -127,6 +127,9 @@ Push refuses with exit code 4 when the remote has commits that this machine has 
 then push again. Each pull that changes a file first copies it into `~/.harness-sync/backups/<timestamp>/`. In a JSON
 file, pull changes only the synced values and leaves every other byte as it was.
 
+The repo can hold files that harness-sync does not manage, such as a `README.md` or the files of an earlier tool. Pull
+never writes one to the home directory. Status and push print a warning for each.
+
 ## Conflicts
 
 harness-sync compares each item three ways: the local value, the remote snapshot, and the base commit, which is the
@@ -255,14 +258,14 @@ A report looks like this:
   `remote` when that side does not hold it; `null` is a JSON `null` value.
 - `secrets_found` lists item ids when the scan blocks a push, `missing_executables` lists `{id, executable}` pairs
   after a pull, and `undeclared_marketplaces` lists `{name, declaration}` pairs from status and push for the
-  marketplaces that do not sync and that the repo's `exclude` list does not cover. Each appears only when it holds
-  entries.
-- `pushes` lists `{target, outcome, commit, review, items}` for each target that a push reached; `review` holds
-  the pushed `commit` and the `change_url` for a Gerrit target. The top-level `items`,
-  `base_commit`, and `remote_commit` belong to the primary target; the `items` of another target list what the push
-  replaced there. `targets` lists `{name, url, branch, kind, primary}` for `target list`, `harnesses` lists
-  `{name, synced}` for `harness list`, and `declarations` lists `{target, secrets, include, exclude}` for the
-  `declarations` commands.
+  marketplaces that do not sync and that the repo's `exclude` list does not cover. `unmanaged_files` lists the repo
+  paths of the files in the remote snapshot that harness-sync does not manage, from status and push; a push to another
+  target lists them in that target's entry of `pushes`. Each appears only when it holds entries.
+- `pushes` lists `{target, outcome, commit, review, items, unmanaged_files}` for each target that a push reached;
+  `review` holds the pushed `commit` and the `change_url` for a Gerrit target. The top-level `items`, `base_commit`, and
+  `remote_commit` belong to the primary target; the `items` of another target list what the push replaced there.
+  `targets` lists `{name, url, branch, kind, primary}` for `target list`, `harnesses` lists `{name, synced}` for
+  `harness list`, and `declarations` lists `{target, secrets, include, exclude}` for the `declarations` commands.
 - A file item shows `{blob}`, its git blob id, in place of its content, and `executable: true` when the file is
   executable.
 

@@ -38,7 +38,8 @@ pub fn run(paths: &Paths, to: &[String]) -> Result<Report> {
 
 fn push_to(paths: &Paths, target: &str) -> Result<(Session, Report, Option<Review>)> {
     let session = Session::open_target(paths, Some(target))?;
-    let (report, review) = push(paths, &session)?;
+    let (mut report, review) = push(paths, &session)?;
+    report.unmanaged_files = session.unmanaged_files()?;
     Ok((session, report, review))
 }
 
@@ -171,13 +172,16 @@ fn combine(pushed: Vec<(Session, Report, Option<Review>)>) -> Report {
             commit: report.remote_commit.clone(),
             review,
             items: Vec::new(),
+            unmanaged_files: Vec::new(),
         };
         if session.is_primary() {
             combined.base_commit = report.base_commit;
             combined.remote_commit = report.remote_commit;
             combined.items = report.items;
+            combined.unmanaged_files = report.unmanaged_files;
         } else {
             target.items = report.items;
+            target.unmanaged_files = report.unmanaged_files;
         }
         combined.pushes.push(target);
     }
