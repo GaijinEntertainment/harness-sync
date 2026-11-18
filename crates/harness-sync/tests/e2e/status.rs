@@ -54,6 +54,24 @@ fn status_without_a_settings_file_matches_an_empty_remote() {
 }
 
 #[test]
+fn status_counts_one_difference_in_the_singular() {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    machine.write_settings(&json!({"effortLevel": "high"}));
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+
+    let output = machine.harness_sync(&["status"]);
+
+    assert_exit(&output, 0);
+    assert!(
+        text(&output.stdout)
+            .starts_with("1 local change, 0 remote changes, 0 conflicts, 0 pinned\n"),
+        "stdout: {}",
+        text(&output.stdout)
+    );
+}
+
+#[test]
 fn status_reports_a_settings_file_that_is_not_json() {
     let remote = Remote::new();
     let machine = Machine::new();
