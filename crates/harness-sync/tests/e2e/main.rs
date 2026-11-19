@@ -21,6 +21,8 @@ mod pull;
 #[cfg(test)]
 mod push;
 #[cfg(test)]
+mod retired;
+#[cfg(test)]
 mod secret;
 #[cfg(test)]
 mod status;

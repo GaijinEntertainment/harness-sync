@@ -77,7 +77,7 @@ run `harness-sync pull` first, then push.
 something other than `origin`; see [Targets](#targets). It syncs each harness whose directory exists on the machine;
 `--harness claude-code` names the harnesses instead, and `harness-sync harness add|remove|list` changes the list later.
 The machine-local state lives in `~/.harness-sync/`: `config.toml` (the harnesses, the targets, the primary target, and
-the pins of this machine), `repo.git` (a bare clone), `missing-secrets.toml`, and `backups/`.
+the pins of this machine), `repo.git` (a bare clone), `missing-secrets.toml`, `retired-items.toml`, and `backups/`.
 
 A machine reads and writes only the items of the harnesses it syncs. Push leaves the items of other harnesses in the
 repo as they are. A harness that a machine starts to sync after its last pull has no base commit until the next pull:
@@ -217,6 +217,12 @@ exclude = [".claude/statusline-mac.sh", ".claude/settings.json:/model"]
 - `exclude` removes every item under each entry, on every machine. `harness-sync declarations add exclude` also removes
   those items from the repo in the same commit.
 
+An `exclude` entry stops the sync of an item and leaves its value on each machine. On a machine that got the item
+through the sync, the next pull records it as a retired item; from then on status and pull list it and print a warning.
+`harness-sync retired remove` deletes the retired items from that machine, with a backup of each file that changes, and
+`harness-sync retired keep` keeps them and stops the warning. The machine that added the entry with
+`declarations add exclude` gets no warning when it was level with the repo and the target is not a Gerrit project.
+
 A secret that a push sent before its item id was declared stays in the git history of the repo; the next push replaces
 it with a placeholder.
 
@@ -265,7 +271,9 @@ A report looks like this:
   after a pull, and `undeclared_marketplaces` lists `{name, declaration}` pairs from status and push for the
   marketplaces that do not sync and that the repo's `exclude` list does not cover. `unmanaged_files` lists the repo
   paths of the files in the remote snapshot that harness-sync does not manage, from status and push; a push to another
-  target lists them in that target's entry of `pushes`. Each appears only when it holds entries.
+  target lists them in that target's entry of `pushes`. `retired_items` lists the item ids of the retired items of
+  this machine, from status and pull; `retired remove` and `retired keep` list the ones that they removed or kept. Each
+  appears only when it holds entries.
 - `pushes` lists `{target, outcome, commit, review, items, unmanaged_files}` for each target that a push reached;
   `review` holds the pushed `commit` and the `change_url` for a Gerrit target. The top-level `items`, `base_commit`, and
   `remote_commit` belong to the primary target; the `items` of another target list what the push replaced there.

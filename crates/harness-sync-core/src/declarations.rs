@@ -63,4 +63,12 @@ impl Declarations {
             .iter()
             .any(|path| path.covers(&id.file, &id.path))
     }
+
+    pub(crate) fn without_exclude(&self) -> Self {
+        Self {
+            secrets: self.secrets.clone(),
+            include: self.include.clone(),
+            exclude: Vec::new(),
+        }
+    }
 }

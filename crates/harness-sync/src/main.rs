@@ -13,7 +13,8 @@ use harness_sync_core::pull::{Choices, Prompts, Side, Take};
 use harness_sync_core::registry::Registry;
 use harness_sync_core::report::Report;
 use harness_sync_core::{
-    config, declare, harnesses, init, pin, pull, push, registry, set_secret, status, target,
+    config, declare, harnesses, init, pin, pull, push, registry, retired, set_secret, status,
+    target,
 };
 use harness_sync_git::{GERRIT, GIT};
 
@@ -100,6 +101,11 @@ enum Command {
     Secret {
         #[command(subcommand)]
         command: SecretCommand,
+    },
+    /// Remove or keep the items that the repo's exclude list took out of the sync and that this machine still holds
+    Retired {
+        #[command(subcommand)]
+        command: RetiredCommand,
     },
     /// Manage the git repos that this machine pushes to
     Target {
@@ -199,6 +205,14 @@ enum HarnessCommand {
 }
 
 #[derive(Debug, Subcommand)]
+enum RetiredCommand {
+    /// Delete each retired item from this machine, with a backup of each file that changes
+    Remove,
+    /// Keep each retired item on this machine and stop the warning about it
+    Keep,
+}
+
+#[derive(Debug, Subcommand)]
 enum SecretCommand {
     /// Set a secret value on this machine, from a TTY prompt or from stdin
     Set {
@@ -247,6 +261,12 @@ fn execute(cli: &Cli) -> Result<Report> {
         Command::Secret {
             command: SecretCommand::Set { item_id },
         } => set_secret::run(&paths, item_id, || output::read_secret(item_id, prompts)),
+        Command::Retired {
+            command: RetiredCommand::Remove,
+        } => retired::remove(&paths),
+        Command::Retired {
+            command: RetiredCommand::Keep,
+        } => retired::keep(&paths),
         Command::Target { command } => match command {
             TargetCommand::Add {
                 name,

@@ -171,6 +171,15 @@ sync and OS-specific values both use pins.
 **Avoid:** exclude (removes an item from the catalog on every machine); override (implies a value that comes from a
 layer, and harness-sync has no layers).
 
+### Retired item
+
+A supported item that synced to this machine, that the repo's `exclude` list then took out of the sync, and that this
+machine still holds. Status and pull list the retired items, `retired remove` deletes them from this machine, and
+`retired keep` keeps them. The machine that added the `exclude` entry has none.
+
+**Avoid:** excluded item (also covers an item that never synced to this machine, which is not retired); unmanaged file
+(a file in the repo, not a value on a machine); orphan (suggests a referenced file that lost its reference).
+
 ## Commands and comparison
 
 ### Operator
