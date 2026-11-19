@@ -146,6 +146,10 @@ impl Paths {
         self.state_dir.join("missing-secrets.toml")
     }
 
+    pub(crate) fn retired_items_file(&self) -> PathBuf {
+        self.state_dir.join("retired-items.toml")
+    }
+
     /// The directory where a storage kind keeps its local state, such as a bare git repo.
     #[must_use]
     pub fn repo_dir(&self) -> PathBuf {

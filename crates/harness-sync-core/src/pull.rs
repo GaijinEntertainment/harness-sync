@@ -14,7 +14,7 @@ use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, counted, with_missing_secrets};
 use crate::session::Session;
 use crate::setup::Backup;
-use crate::{executables, files, home, secret, setup};
+use crate::{executables, files, home, retired, secret, setup};
 
 /// The side whose value of a conflicting item wins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,13 +119,16 @@ pub fn run(paths: &Paths, choices: &Choices<'_>, prompts: Option<&dyn Prompts>) 
             "{}, nothing written: choose a side with --take ITEM=local|remote or --prefer local|remote",
             counted(unresolved, "conflict")
         );
-        return Ok(report(&session, &differences, Outcome::Conflicts, summary));
+        let mut stopped = report(&session, &differences, Outcome::Conflicts, summary);
+        stopped.retired_items = retired::recorded(paths, &session)?;
+        return Ok(stopped);
     }
     let from_remote: Vec<&Difference<'_>> = differences
         .iter()
         .filter(|d| takes_remote(d, choices))
         .collect();
     let (setup_now, missing) = apply(paths, &session, &from_remote, prompts)?;
+    let retired_items = retired::record_pulled(paths, &session)?;
     set_base(paths, &session, &remote_commit)?;
     let kept_local = differences
         .iter()
@@ -147,6 +150,7 @@ pub fn run(paths: &Paths, choices: &Choices<'_>, prompts: Option<&dyn Prompts>) 
         .items
         .extend(missing.iter().map(ItemReport::secret_missing));
     pulled.missing_executables = executables::missing(&setup_now, &paths.home);
+    pulled.retired_items = retired_items;
     pulled.base_commit = Some(remote_commit);
     Ok(pulled)
 }
@@ -227,7 +231,11 @@ fn apply(
     Ok((setup_now, missing))
 }
 
-fn write(paths: &Paths, session: &Session, writes: &[(&ItemId, Option<Value>)]) -> Result<()> {
+pub(crate) fn write(
+    paths: &Paths,
+    session: &Session,
+    writes: &[(&ItemId, Option<Value>)],
+) -> Result<()> {
     let backup = Backup::new(paths);
     for keyed in keyed_files() {
         let edits: Vec<Edit<'_>> = writes

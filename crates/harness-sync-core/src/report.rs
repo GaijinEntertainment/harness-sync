@@ -59,6 +59,9 @@ pub struct Report {
     /// The repo paths of the unmanaged files in the remote snapshot of the primary target.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unmanaged_files: Vec<String>,
+    /// The item ids of the retired items of this machine; a `retired` command lists the ones that it removed or kept.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub retired_items: Vec<String>,
     /// The targets of this machine, for `target list`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub targets: Vec<TargetReport>,
@@ -88,6 +91,7 @@ impl Report {
             missing_executables: Vec::new(),
             undeclared_marketplaces: Vec::new(),
             unmanaged_files: Vec::new(),
+            retired_items: Vec::new(),
             targets: Vec::new(),
             harnesses: Vec::new(),
             pushes: Vec::new(),
