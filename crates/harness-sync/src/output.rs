@@ -74,6 +74,14 @@ fn warn(report: &Report) {
             "`harness-sync push --prune` removes the unmanaged files from the snapshot of each target that it sends to"
         );
     }
+    if !report.retired_items.is_empty() && matches!(report.command, "status" | "pull") {
+        // ignored: a warning that cannot reach stderr has no other channel
+        let _ = writeln!(
+            stderr,
+            "warning: the retired items no longer sync, and this machine still holds them: \
+             `harness-sync retired remove` deletes them here, and `harness-sync retired keep` keeps them"
+        );
+    }
 }
 
 pub(crate) fn can_prompt(no_input: bool) -> bool {
@@ -147,6 +155,10 @@ fn human(report: &Report) -> String {
     for item in &report.items {
         // ignored: writing to a String cannot fail
         let _ = writeln!(text, "  {:<14}  {}", label(item.state), item.id);
+    }
+    for id in &report.retired_items {
+        // ignored: writing to a String cannot fail
+        let _ = writeln!(text, "  {:<14}  {id}", "retired");
     }
     for push in &report.pushes {
         for item in &push.items {

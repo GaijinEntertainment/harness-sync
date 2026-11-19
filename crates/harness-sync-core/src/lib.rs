@@ -17,6 +17,7 @@ pub mod pull;
 pub mod push;
 pub mod registry;
 pub mod report;
+pub mod retired;
 pub mod secret;
 pub mod set_secret;
 pub mod status;

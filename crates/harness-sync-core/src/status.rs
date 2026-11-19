@@ -5,8 +5,8 @@ use anyhow::Result;
 use crate::compare::{Difference, ItemState};
 use crate::paths::Paths;
 use crate::report::{ItemReport, Report, counted, with_missing_secrets};
-use crate::secret;
 use crate::session::Session;
+use crate::{retired, secret};
 
 /// Lists the supported items that differ between the local setup and the remote snapshot of the primary target.
 ///
@@ -29,6 +29,7 @@ pub fn run(paths: &Paths) -> Result<Report> {
             .chain(missing.iter().map(ItemReport::secret_missing))
             .collect(),
         unmanaged_files: session.unmanaged_files()?,
+        retired_items: retired::recorded(paths, &session)?,
         undeclared_marketplaces: session.undeclared_marketplaces,
         base_commit: session.base_commit,
         remote_commit: session.remote_commit,
