@@ -55,7 +55,7 @@ Download the archive for your platform from the GitHub releases of this repo and
 build it with Rust 1.99 or later:
 
 ```sh
-cargo install --locked --git https://github.com/xobotyi/harness-sync harness-sync
+cargo install --locked --git https://github.com/GaijinEntertainment/harness-sync harness-sync
 ```
 
 harness-sync runs every repo operation through the `git` executable, so `git` must be on PATH with access to your
