@@ -18,13 +18,15 @@ use crate::{secret, setup, storage};
 ///
 /// # Errors
 ///
-/// Fails when `key` does not name a secret in a keyed JSON file, `value` fails, or the file cannot be written.
+/// Fails when the sync configuration cannot be read, `key` does not name a secret in a keyed JSON file, `value`
+/// fails, or the file cannot be written.
 pub fn run(paths: &Paths, key: &KeyPath, value: impl FnOnce() -> Result<String>) -> Result<Report> {
+    let config = Config::load(&paths.config_file())?;
     let mut missing = secret::load_missing(&paths.missing_secrets_file())?;
     ensure!(
         missing.contains(key)
             || secret::is_secret_path(key, &[])
-            || secret::is_secret_path(key, &declared_secrets(paths)?),
+            || secret::is_secret_path(key, &declared_secrets(paths, config.as_ref())?),
         "`{key}` does not name a secret: no secret name rule matches it, harness-sync.toml in the repo does not declare it, \
          and pull did not record it as missing"
     );
@@ -53,11 +55,11 @@ pub fn run(paths: &Paths, key: &KeyPath, value: impl FnOnce() -> Result<String>)
     ))
 }
 
-fn declared_secrets(paths: &Paths) -> Result<Vec<KeyPath>> {
-    let Some(config) = Config::load(&paths.config_file())? else {
+fn declared_secrets(paths: &Paths, config: Option<&Config>) -> Result<Vec<KeyPath>> {
+    let Some(config) = config else {
         return Ok(Vec::new());
     };
-    let storage = storage::open(paths, &config, &config.primary)?;
+    let storage = storage::open(paths, config, &config.primary)?;
     storage.fetch()?;
     let remote_commit = storage.head()?;
     Ok(Declarations::load(storage.as_ref(), remote_commit.as_deref())?.secrets)

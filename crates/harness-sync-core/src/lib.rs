@@ -27,6 +27,7 @@ pub mod target;
 mod atomic;
 mod executables;
 mod files;
+mod format;
 mod home;
 mod json_edit;
 mod references;

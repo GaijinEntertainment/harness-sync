@@ -13,6 +13,49 @@ fn init_connects_to_an_empty_remote() {
     assert!(report["remote_commit"].is_null());
     let config = std::fs::read_to_string(machine.home().join(".harness-sync/config.toml")).unwrap();
     assert!(config.contains(&remote.url()), "config: {config}");
+    let config: toml::Table = config.parse().unwrap();
+    assert_eq!(config["format"].as_integer(), Some(1));
+}
+
+fn run_with_config(args: &[&str], rewrite: impl FnOnce(&str) -> String) -> std::process::Output {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    let config = machine.read_file(".harness-sync/config.toml").unwrap();
+    machine.write_file(".harness-sync/config.toml", &rewrite(&config));
+    machine.harness_sync(args)
+}
+
+#[test]
+fn a_sync_configuration_of_a_newer_format_is_refused_by_each_command_that_uses_the_state() {
+    let newer = |config: &str| {
+        config
+            .replace("format = 1", "format = 2")
+            .replace("primary = \"origin\"", "primary = 1")
+    };
+    let commands: [&[&str]; 3] = [
+        &["status"],
+        &["retired", "keep"],
+        &["secret", "set", ".claude/settings.json:/env/GITHUB_TOKEN"],
+    ];
+
+    for command in commands {
+        let output = run_with_config(command, newer);
+
+        assert_exit(&output, 1);
+        assert!(
+            text(&output.stderr).contains("has the format 2"),
+            "{command:?} stderr: {}",
+            text(&output.stderr)
+        );
+    }
+}
+
+#[test]
+fn a_sync_configuration_without_a_format_has_the_first_format() {
+    let output = run_with_config(&["status"], |config| config.replace("format = 1\n", ""));
+
+    assert_exit(&output, 0);
 }
 
 #[test]

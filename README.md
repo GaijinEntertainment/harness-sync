@@ -76,8 +76,9 @@ run `harness-sync pull` first, then push.
 `init` takes `--branch` when the snapshot should live on a branch other than `main`, and `--name` to name the repo
 something other than `origin`; see [Targets](#targets). It syncs each harness whose directory exists on the machine;
 `--harness claude-code` names the harnesses instead, and `harness-sync harness add|remove|list` changes the list later.
-The machine-local state lives in `~/.harness-sync/`: `config.toml` (the harnesses, the targets, the primary target, and
-the pins of this machine), `repo.git` (a bare clone), `missing-secrets.toml`, `retired-items.toml`, and `backups/`.
+The machine-local state lives in `~/.harness-sync/`: `config.toml` (the format of this directory, the harnesses, the
+targets, the primary target, and the pins of this machine), `repo.git` (a bare clone), `missing-secrets.toml`,
+`retired-items.toml`, and `backups/`.
 
 A machine reads and writes only the items of the harnesses it syncs. Push leaves the items of other harnesses in the
 repo as they are. A harness that a machine starts to sync after its last pull has no base commit until the next pull:
@@ -198,6 +199,11 @@ harness-sync declarations add exclude .claude/settings.json:/extraKnownMarketpla
 harness-sync declarations remove exclude .claude/settings.json:/model --target mirror
 harness-sync declarations show
 ```
+
+The file can also hold `format`, the number of the format of the repo. This harness-sync reads format 1, which is also
+the format of a repo without the key. A release raises the number with a change that a build of the previous format
+would misread, or that would lose data when that build writes the files. The older build then stops with an error that
+asks for a newer harness-sync. `config.toml` holds the same key for `~/.harness-sync/`.
 
 The command rewrites the file and drops its comments. You can also edit the file in any clone of the repo, then
 `git commit` it and `git push` it to the target's branch, or to `refs/for/<branch>` for a Gerrit target. A change for a

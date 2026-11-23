@@ -138,6 +138,16 @@ and this machine's pins. Push never sends it.
 **Avoid:** config (collides with the configuration of each harness); catalog (shared through the repo with every
 machine); profile (other sync tools use it for shared layers that harness-sync does not have).
 
+### Format
+
+The number that says how a repo or the machine-local state is laid out: `format` in `harness-sync.toml` for the repo of
+a target, and `format` in `config.toml` for `~/.harness-sync/`. A build refuses a number above the one that it knows.
+The number moves only with a change that a build of the previous format would misread, or that would lose data when
+that build writes the files.
+
+**Avoid:** version (names a release of harness-sync, such as 0.1.0, which moves without a change of format); schema
+(suggests the keys of one file, but the repo format also covers the layout and the placeholders).
+
 ### Target
 
 A named place in the sync configuration that push can send the snapshot to: a repo and a branch for the git and Gerrit
