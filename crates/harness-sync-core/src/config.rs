@@ -7,13 +7,16 @@ use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+use toml::Table;
 
 use crate::harness::Selection;
 use crate::item::ItemId;
-use crate::{atomic, storage};
+use crate::{atomic, format, storage};
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Config {
+    #[serde(default = "format::first")]
+    pub(crate) format: u32,
     pub(crate) primary: String,
     pub(crate) harnesses: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -91,8 +94,10 @@ impl Config {
             Err(err) if err.kind() == ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err).with_context(|| format!("cannot read {}", path.display())),
         };
-        let config: Self =
-            toml::from_str(&text).with_context(|| format!("cannot parse {}", path.display()))?;
+        let parse_failure = || format!("cannot parse {}", path.display());
+        let table: Table = text.parse().with_context(parse_failure)?;
+        format::ensure_readable(&table, format::STATE, &path.display().to_string())?;
+        let config: Self = table.try_into().with_context(parse_failure)?;
         for (name, target) in &config.targets {
             target
                 .ensure_no_password()
@@ -125,5 +130,21 @@ impl Config {
     pub(crate) fn save(&self, path: &Path) -> Result<()> {
         let text = toml::to_string(self).context("cannot serialize the sync configuration")?;
         atomic::write(path, text.as_bytes())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_file_without_a_format_loads_as_the_first_format() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("config.toml");
+        fs::write(&file, "primary = \"origin\"\nharnesses = []\n[targets]\n").unwrap();
+
+        let config = Config::load(&file).unwrap().unwrap();
+
+        assert_eq!(config.format, 1);
     }
 }

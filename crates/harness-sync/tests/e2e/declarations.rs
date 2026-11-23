@@ -198,3 +198,31 @@ fn show_lists_the_declarations_of_another_target() {
         json!({"target": "mirror", "secrets": [], "include": [], "exclude": [".claude/settings.json:/model"]})
     );
 }
+
+#[test]
+fn a_repo_of_a_newer_format_is_refused() {
+    let remote = Remote::new();
+    remote.commit_file(
+        "main",
+        "harness-sync.toml",
+        "format = 2\nexclude = \"all\"\n",
+    );
+    let machine = Machine::new();
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+
+    let status = machine.harness_sync(&["status"]);
+    let show = machine.harness_sync(&["declarations", "show"]);
+
+    assert_exit(&status, 1);
+    assert!(
+        text(&status.stderr).contains("the repo has the format 2"),
+        "stderr: {}",
+        text(&status.stderr)
+    );
+    assert_exit(&show, 1);
+    assert!(
+        text(&show.stderr).contains("the repo has the format 2"),
+        "stderr: {}",
+        text(&show.stderr)
+    );
+}
