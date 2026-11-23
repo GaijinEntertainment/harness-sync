@@ -4,10 +4,11 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::files;
 use crate::harness;
-use crate::item::{Items, is_within};
+use crate::item::{ItemId, Items, KeyPath, is_within};
 use crate::paths::Paths;
+use crate::report::UnsyncedDirectory;
+use crate::{files, secret};
 
 const WORD_SEPARATORS: [char; 11] = [' ', '\t', '\n', '"', '\'', '=', '(', ')', ';', '&', '|'];
 
@@ -77,16 +78,78 @@ fn markdown_targets(text: &str) -> Vec<&str> {
         .collect()
 }
 
-fn resolve(paths: &Paths, raw: &str, base: Option<&Path>) -> Option<String> {
+pub(crate) fn unsynced_directories(
+    paths: &Paths,
+    setup: &Items,
+    pins: &BTreeSet<ItemId>,
+    declared_secrets: &[KeyPath],
+) -> Vec<UnsyncedDirectory> {
+    let mut found = Vec::new();
+    let moving = setup
+        .iter()
+        .filter(|(id, _)| !id.is_whole_file() && !pins.contains(*id));
+    for (id, value) in moving {
+        for_each_string(value, &mut id.key_path(), &mut |key, text| {
+            if secret::is_secret_path(key, declared_secrets) {
+                return;
+            }
+            let unsynced = directory(paths, text)
+                .filter(|dir| !setup.keys().any(|id| is_within(&id.file, dir)));
+            if let Some(directory) = unsynced {
+                found.push(UnsyncedDirectory {
+                    id: key.to_string(),
+                    directory,
+                });
+            }
+        });
+    }
+    found
+}
+
+fn directory(paths: &Paths, raw: &str) -> Option<String> {
+    let normal = normalize(&absolute(paths, raw, None)?)?;
+    let dir = paths.home_path(&normal)?;
+    (paths.local(&dir) == normal
+        && !paths.is_behind_symlink(&dir)
+        && fs::symlink_metadata(&normal).is_ok_and(|metadata| metadata.is_dir()))
+    .then_some(dir)
+}
+
+fn for_each_string(value: &Value, key: &mut KeyPath, visit: &mut impl FnMut(&KeyPath, &str)) {
+    match value {
+        Value::String(text) => visit(key, text),
+        Value::Object(entries) => {
+            for (name, child) in entries {
+                key.path.push(name.clone());
+                for_each_string(child, key, visit);
+                key.path.pop();
+            }
+        }
+        Value::Array(elements) => {
+            for (index, child) in elements.iter().enumerate() {
+                key.path.push(index.to_string());
+                for_each_string(child, key, visit);
+                key.path.pop();
+            }
+        }
+        _ => {}
+    }
+}
+
+fn absolute(paths: &Paths, raw: &str, base: Option<&Path>) -> Option<PathBuf> {
     let expanded = ["~/", "$HOME/", "${HOME}/"]
         .iter()
         .find_map(|prefix| raw.strip_prefix(prefix))
         .map(|rest| paths.home.join(rest));
-    let path = match expanded {
-        Some(path) => path,
-        None if Path::new(raw).is_absolute() => PathBuf::from(raw),
-        None => base?.join(raw),
-    };
+    match expanded {
+        Some(path) => Some(path),
+        None if Path::new(raw).is_absolute() => Some(PathBuf::from(raw)),
+        None => Some(base?.join(raw)),
+    }
+}
+
+fn resolve(paths: &Paths, raw: &str, base: Option<&Path>) -> Option<String> {
+    let path = absolute(paths, raw, base)?;
     let normal = normalize(&path)?;
     let file = paths.home_path(&normal)?;
     let harness = harness::owner(&file)?;
@@ -180,5 +243,20 @@ mod tests {
         }
         assert_eq!(resolve(&paths, "~/outside.sh", None), None);
         assert_eq!(resolve(&paths, "~/.claude/hooks/absent.sh", None), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_directory_behind_a_symlink_is_not_a_directory_below_the_home() {
+        let outside = tempfile::tempdir().unwrap();
+        fs::create_dir(outside.path().join("sub")).unwrap();
+        let home = tempfile::tempdir().unwrap();
+        fs::create_dir(home.path().join("work")).unwrap();
+        std::os::unix::fs::symlink(outside.path(), home.path().join("work/link")).unwrap();
+        let paths = Paths::for_home(home.path());
+
+        assert_eq!(directory(&paths, "~/work").as_deref(), Some("work"));
+        assert_eq!(directory(&paths, "~/work/link"), None);
+        assert_eq!(directory(&paths, "~/work/link/sub"), None);
     }
 }

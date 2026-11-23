@@ -56,6 +56,9 @@ pub struct Report {
     /// The marketplaces that do not sync, because the settings do not declare them.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub undeclared_marketplaces: Vec<UndeclaredMarketplace>,
+    /// The synced values that name a directory of this machine whose files do not sync.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unsynced_directories: Vec<UnsyncedDirectory>,
     /// The repo paths of the unmanaged files in the remote snapshot of the primary target.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unmanaged_files: Vec<String>,
@@ -90,6 +93,7 @@ impl Report {
             secrets_found: Vec::new(),
             missing_executables: Vec::new(),
             undeclared_marketplaces: Vec::new(),
+            unsynced_directories: Vec::new(),
             unmanaged_files: Vec::new(),
             retired_items: Vec::new(),
             targets: Vec::new(),
@@ -183,6 +187,15 @@ pub struct UndeclaredMarketplace {
     pub name: String,
     /// The declaration to add to the settings, with secrets masked.
     pub declaration: Value,
+}
+
+/// A synced value that names a directory of this machine whose files do not sync.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UnsyncedDirectory {
+    /// The key path of the value.
+    pub id: String,
+    /// The path of the directory, relative to the home directory.
+    pub directory: String,
 }
 
 /// A supported item that differs between the local setup and the remote snapshot.
