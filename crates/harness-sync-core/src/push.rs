@@ -12,7 +12,7 @@ use crate::paths::Paths;
 use crate::report::{ItemReport, Outcome, Report, Review, TargetPush, counted, short_commit};
 use crate::session::Session;
 use crate::storage::{FileChange, Publish};
-use crate::{files, secret, setup};
+use crate::{files, references, secret, setup};
 
 /// Pushes to the primary target, or to the targets `to`, where `all` names every target. The push stops at the first
 /// target that refuses it.
@@ -43,6 +43,14 @@ fn push_to(paths: &Paths, target: &str, prune: bool) -> Result<(Session, Report,
     let unmanaged = session.unmanaged_files()?;
     let pruned = if prune { unmanaged.as_slice() } else { &[] };
     let (mut report, review) = push(paths, &session, pruned)?;
+    if session.is_primary() {
+        report.unsynced_directories = references::unsynced_directories(
+            paths,
+            &session.local_setup,
+            &session.pins,
+            &session.declarations.secrets,
+        );
+    }
     let snapshot_stayed = report.remote_commit == session.remote_commit;
     if pruned.is_empty() || snapshot_stayed {
         report.unmanaged_files = unmanaged;
@@ -201,6 +209,7 @@ fn combine(pushed: Vec<(Session, Report, Option<Review>)>) -> Report {
             combined.remote_commit = report.remote_commit;
             combined.items = report.items;
             combined.unmanaged_files = report.unmanaged_files;
+            combined.unsynced_directories = report.unsynced_directories;
         } else {
             target.items = report.items;
             target.unmanaged_files = report.unmanaged_files;
