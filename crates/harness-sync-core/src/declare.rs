@@ -5,6 +5,7 @@ use toml::{Table, Value};
 
 use crate::config::Config;
 use crate::declarations::{DECLARATIONS_FILE, Declarations};
+use crate::format;
 use crate::item::KeyPath;
 use crate::paths::Paths;
 use crate::report::{DeclarationsReport, Outcome, Report, Review, TargetPush, short_commit};
@@ -73,10 +74,12 @@ impl Repo {
                 self.target
             )
         };
-        String::from_utf8(bytes)
+        let table: Table = String::from_utf8(bytes)
             .with_context(context)?
             .parse()
-            .with_context(context)
+            .with_context(context)?;
+        format::ensure_readable(&table, format::REPO, "the repo").with_context(context)?;
+        Ok(table)
     }
 }
 

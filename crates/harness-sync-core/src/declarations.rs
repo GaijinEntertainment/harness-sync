@@ -2,7 +2,9 @@
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use toml::Table;
 
+use crate::format;
 use crate::item::{ItemId, KeyPath};
 use crate::storage::Storage;
 
@@ -45,7 +47,9 @@ impl Declarations {
     }
 
     pub(crate) fn parse(text: &str) -> Result<Self> {
-        let file: DeclarationsFile = toml::from_str(text)?;
+        let table: Table = text.parse()?;
+        format::ensure_readable(&table, format::REPO, "the repo")?;
+        let file: DeclarationsFile = table.try_into()?;
         let parse = |list: &[String]| -> Result<Vec<KeyPath>> {
             list.iter().map(|key| key.parse()).collect()
         };

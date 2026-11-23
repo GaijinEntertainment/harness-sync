@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::config::Config;
 use crate::declarations::Declarations;
 use crate::harness::Selection;
 use crate::item::ItemId;
@@ -48,8 +49,9 @@ pub fn remove(paths: &Paths) -> Result<Report> {
 ///
 /// # Errors
 ///
-/// Fails when the list of retired items cannot be read or written.
+/// Fails when the sync configuration or the list of retired items cannot be read, or the list cannot be written.
 pub fn keep(paths: &Paths) -> Result<Report> {
+    Config::load(&paths.config_file())?;
     let file = paths.retired_items_file();
     let retired = load(&file)?;
     if !retired.is_empty() {

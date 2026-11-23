@@ -6,10 +6,10 @@ use std::fs;
 use anyhow::{Context, Result, ensure};
 
 use crate::config::{Config, Target};
-use crate::harness;
 use crate::paths::Paths;
 use crate::report::{Report, short_commit};
 use crate::storage;
+use crate::{format, harness};
 
 /// Connects this machine to `target` as its primary target `name`, and makes it sync `harnesses`, or each harness
 /// whose directory exists when `harnesses` is empty.
@@ -37,6 +37,7 @@ pub fn run(paths: &Paths, name: &str, target: Target, harnesses: &[String]) -> R
     let config = match existing {
         Some(existing) => existing,
         None => Config {
+            format: format::STATE,
             primary: name.to_owned(),
             harnesses: chosen_harnesses(paths, harnesses)?,
             harnesses_without_base: Vec::new(),

@@ -28,3 +28,4 @@ lost, and what would reopen it.
 - [1.17 Never follow a symlink below the home directory](/design-docs/adr/1.17-symlinks.md)
 - [1.18 Keep unmanaged files in the repo, warn about them, and remove them only on request](/design-docs/adr/1.18-unmanaged-files.md)
 - [1.19 Keep the local value of an item that leaves the sync, warn about it, and remove it only on request](/design-docs/adr/1.19-retired-items.md)
+- [1.20 Number the format of the repo and of the machine-local state, and refuse a newer format](/design-docs/adr/1.20-format-versions.md)
