@@ -145,3 +145,93 @@ fn a_line_break_in_an_unmanaged_path_does_not_start_a_warning_line() {
         "stderr: {stderr}"
     );
 }
+
+#[test]
+fn status_and_push_list_a_synced_value_that_names_a_directory_whose_files_do_not_sync() {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    let home = machine.expanded_home();
+    machine.write_file("work/notes.txt", "");
+    machine.write_file(".claude/rules/a.md", "Rule.\n");
+    machine.write_settings(&json!({
+        "permissions": {"additionalDirectories": [
+            format!("{home}/work"),
+            format!("{home}/.claude/rules"),
+            format!("{home}/absent")
+        ]},
+        "apiKeyHelper": format!("{home}/work"),
+        "env": {"WORK_TOKEN": format!("{home}/work")}
+    }));
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+    assert_exit(
+        &machine.harness_sync(&["pin", ".claude/settings.json:/apiKeyHelper"]),
+        0,
+    );
+
+    let (status, _) = machine.harness_sync_json(&["status"]);
+    let (push, output) = machine.harness_sync_json(&["push"]);
+
+    assert_exit(&output, 0);
+    let listed = json!([{
+        "id": ".claude/settings.json:/permissions/additionalDirectories/0",
+        "directory": "work"
+    }]);
+    assert_eq!(status["unsynced_directories"], listed);
+    assert_eq!(push["unsynced_directories"], listed);
+    let warned = machine.harness_sync(&["status"]);
+    assert!(
+        text(&warned.stderr).contains("names the directory ~/work"),
+        "stderr: {}",
+        text(&warned.stderr)
+    );
+}
+
+#[test]
+fn a_value_that_names_the_default_directory_of_a_moved_harness_root_gives_no_warning() {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    let named = format!("{}/.claude/hooks", machine.expanded_home());
+    machine.write_file(".claude/hooks/x.sh", "");
+    machine.write_file(
+        "alt/settings.json",
+        &json!({"permissions": {"additionalDirectories": [named]}}).to_string(),
+    );
+    assert_exit(
+        &machine.harness_sync_in_config_dir("alt", &["init", &remote.url()]),
+        0,
+    );
+
+    let output = machine.harness_sync_in_config_dir("alt", &["status", "--json"]);
+
+    assert_exit(&output, 0);
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report.get("unsynced_directories"), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_line_break_in_an_unsynced_directory_does_not_start_a_warning_line() {
+    let remote = Remote::new();
+    let machine = Machine::new();
+    let named = format!("{}/work\nwarning: forged", machine.expanded_home());
+    machine.write_file("work\nwarning: forged/notes.txt", "");
+    machine.write_settings(&json!({"permissions": {"additionalDirectories": [named]}}));
+    assert_exit(&machine.harness_sync(&["init", &remote.url()]), 0);
+
+    let output = machine.harness_sync(&["status"]);
+
+    assert_exit(&output, 0);
+    let stderr = text(&output.stderr);
+    assert!(
+        stderr.contains("names the directory ~/work\\nwarning: forged, whose"),
+        "stderr: {stderr}"
+    );
+    assert_eq!(
+        stderr
+            .lines()
+            .filter(|line| line.starts_with("warning:"))
+            .count(),
+        1,
+        "stderr: {stderr}"
+    );
+}

@@ -43,6 +43,16 @@ fn warn(report: &Report) {
             undeclared.name, undeclared.name, undeclared.declaration
         );
     }
+    for unsynced in &report.unsynced_directories {
+        // ignored: a warning that cannot reach stderr has no other channel
+        let _ = writeln!(
+            stderr,
+            "warning: {} names the directory ~/{}, whose files do not sync; another machine gets the value without \
+             the directory",
+            unsynced.id.escape_debug(),
+            unsynced.directory.escape_debug()
+        );
+    }
     for file in &report.unmanaged_files {
         // ignored: a warning that cannot reach stderr has no other channel
         let _ = writeln!(

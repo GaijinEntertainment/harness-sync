@@ -188,6 +188,11 @@ the local value. Use it for a value only one machine needs, or for an OS-specifi
 
 Pull warns when a synced status line, hook, or MCP server names a program that is not installed. It installs nothing.
 
+Status and a push to the primary target warn when a synced JSON value names a directory of this machine whose files do
+not sync, such as a marketplace in a local directory: another machine gets the value without the directory. A secret
+gives no warning. Add the directory to `include`,
+or pin or exclude the item that holds the value.
+
 ## harness-sync.toml
 
 Each repo can hold a `harness-sync.toml` at its root with the settings of that repo. A machine reads it from the remote
@@ -276,13 +281,15 @@ A report looks like this:
 - `outcome` is `ok`, `conflicts`, `remote_ahead`, or `secrets_found`.
 - `state` is `local_change`, `remote_change`, `conflict`, `pinned`, or `secret_missing`. An item leaves out `local` or
   `remote` when that side does not hold it; `null` is a JSON `null` value.
-- `secrets_found` lists item ids when the scan blocks a push, `missing_executables` lists `{id, executable}` pairs
-  after a pull, and `undeclared_marketplaces` lists `{name, declaration}` pairs from status and push for the
-  marketplaces that do not sync and that the repo's `exclude` list does not cover. `unmanaged_files` lists the repo
-  paths of the files in the remote snapshot that harness-sync does not manage, from status and push; a push to another
-  target lists them in that target's entry of `pushes`. `retired_items` lists the item ids of the retired items of
-  this machine, from status and pull; `retired remove` and `retired keep` list the ones that they removed or kept. Each
-  appears only when it holds entries.
+- `secrets_found` lists item ids when the scan blocks a push, `missing_executables` lists `{id, executable}` pairs after
+  a pull, and `undeclared_marketplaces` lists `{name, declaration}` pairs from status and push for the marketplaces that
+  do not sync and that the repo's `exclude` list does not cover. `unsynced_directories` lists `{id, directory}` pairs
+  from status and from a push to the primary target, for the synced values that name a directory whose files do not
+  sync; `directory` is relative to the home directory. `unmanaged_files` lists the
+  repo paths of the files in the remote snapshot that harness-sync does not manage, from status and push; a push to
+  another target lists them in that target's entry of `pushes`. `retired_items` lists the item ids of the retired items
+  of this machine, from status and pull; `retired remove` and `retired keep` list the ones that they removed or kept.
+  Each appears only when it holds entries.
 - `pushes` lists `{target, outcome, commit, review, items, unmanaged_files}` for each target that a push reached;
   `review` holds the pushed `commit` and the `change_url` for a Gerrit target. The top-level `items`, `base_commit`, and
   `remote_commit` belong to the primary target; the `items` of another target list what the push replaced there.
