@@ -97,7 +97,7 @@ pub fn run(paths: &Paths, choices: &Choices<'_>, prompts: Option<&dyn Prompts>) 
     let Some(remote_commit) = session.remote_commit.clone() else {
         return Ok(report(
             &session,
-            &[],
+            Vec::new(),
             Outcome::Ok,
             "the remote branch is empty: nothing to pull".to_owned(),
         ));
@@ -119,7 +119,8 @@ pub fn run(paths: &Paths, choices: &Choices<'_>, prompts: Option<&dyn Prompts>) 
             "{}, nothing written: choose a side with --take ITEM=local|remote or --prefer local|remote",
             counted(unresolved, "conflict")
         );
-        let mut stopped = report(&session, &differences, Outcome::Conflicts, summary);
+        let items = differences.iter().map(ItemReport::from).collect();
+        let mut stopped = report(&session, items, Outcome::Conflicts, summary);
         stopped.retired_items = retired::recorded(paths, &session)?;
         return Ok(stopped);
     }
@@ -145,7 +146,8 @@ pub fn run(paths: &Paths, choices: &Choices<'_>, prompts: Option<&dyn Prompts>) 
         ),
         missing.len(),
     );
-    let mut pulled = report(&session, &differences, Outcome::Ok, summary);
+    let items = differences.iter().map(|d| settled(d, choices)).collect();
+    let mut pulled = report(&session, items, Outcome::Ok, summary);
     pulled
         .items
         .extend(missing.iter().map(ItemReport::secret_missing));
@@ -269,17 +271,24 @@ fn takes_remote(difference: &Difference<'_>, choices: &Choices<'_>) -> bool {
     }
 }
 
-fn report(
-    session: &Session,
-    differences: &[Difference<'_>],
-    outcome: Outcome,
-    summary: String,
-) -> Report {
+fn settled(difference: &Difference<'_>, choices: &Choices<'_>) -> ItemReport {
+    let state = match (difference.state, choices.side_for(difference.id)) {
+        (ItemState::Conflict, Some(Side::Remote)) => ItemState::RemoteChange,
+        (ItemState::Conflict, Some(Side::Local)) => ItemState::LocalChange,
+        (state, _) => state,
+    };
+    ItemReport {
+        state,
+        ..ItemReport::from(difference)
+    }
+}
+
+fn report(session: &Session, items: Vec<ItemReport>, outcome: Outcome, summary: String) -> Report {
     Report {
         outcome,
         base_commit: session.base_commit.clone(),
         remote_commit: session.remote_commit.clone(),
-        items: differences.iter().map(ItemReport::from).collect(),
+        items,
         ..Report::new("pull", summary)
     }
 }

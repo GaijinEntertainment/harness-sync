@@ -147,6 +147,9 @@ Choose a side per item with `--take`, or for every remaining conflict with `--pr
 harness-sync pull --take .claude/settings.json:/model=remote --prefer local
 ```
 
+The report of that pull lists each settled conflict as a change of the side that won: `remote_change` for a value that
+pull took, and `local_change` for a value that it kept.
+
 When stdin and stdout are a terminal, pull asks for each conflict that no flag settles. `--no-input` turns every prompt
 off.
 

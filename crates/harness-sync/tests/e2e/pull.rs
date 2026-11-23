@@ -125,6 +125,30 @@ fn take_resolves_a_conflict_with_the_named_side() {
 }
 
 #[test]
+fn a_settled_conflict_reports_the_side_that_won() {
+    let remote = Remote::new();
+    pushed(&remote, &json!({"effortLevel": "high", "model": "opus"}));
+    let second = connected(&remote, &json!({"effortLevel": "low", "model": "sonnet"}));
+
+    let (report, output) = second.harness_sync_json(&[
+        "pull",
+        "--take",
+        ".claude/settings.json:/effortLevel=remote",
+        "--prefer",
+        "local",
+    ]);
+
+    assert_exit(&output, 0);
+    assert_eq!(
+        report["items"],
+        json!([
+            {"id": ".claude/settings.json:/effortLevel", "state": "remote_change", "local": "low", "remote": "high"},
+            {"id": ".claude/settings.json:/model", "state": "local_change", "local": "sonnet", "remote": "opus"}
+        ])
+    );
+}
+
+#[test]
 fn take_for_an_item_without_a_conflict_is_an_error() {
     let remote = Remote::new();
     pushed(&remote, &json!({"effortLevel": "high"}));
