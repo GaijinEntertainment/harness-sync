@@ -188,7 +188,7 @@ pub struct UndeclaredMarketplace {
 /// A supported item that differs between the local setup and the remote snapshot.
 #[derive(Debug, Serialize)]
 pub struct ItemReport {
-    /// The item id.
+    /// The item id, or the key path of a missing secret.
     pub id: String,
     /// How the item differs.
     pub state: ItemState,

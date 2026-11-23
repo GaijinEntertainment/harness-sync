@@ -70,11 +70,20 @@ any JSON object member, synced or not).
 ### Item id
 
 The name of a supported item: the home-relative path of its file with forward slashes, plus `:` and a JSON pointer for
-a key, as in `.claude/settings.json:/env/EDITOR`. The same form names a value inside an item, as in the repo's `secrets`
-list.
+a key, as in `.claude/settings.json:/env/EDITOR`.
 
-**Avoid:** key path (names only the JSON pointer part, which two files can share); repo path (the path of the file in
+**Avoid:** JSON pointer (names only the part after `:`, which two files can share); repo path (the path of the file in
 the repo, without the key).
+
+### Key path
+
+A name in the form of an item id that does not have to name one supported item: a directory, a whole keyed file, or a
+value inside an item. The lists of `harness-sync.toml`, `secret set`, and the ids of `secrets_found`, `secret_missing`,
+and `missing_executables` are key paths. Each item id is a key path. Text for the operator calls a key path an item id,
+because the operator writes both the same way; code keeps the two names apart.
+
+**Avoid:** item id, in code (an item id names one supported item, and a key path can name many items or a part of
+one); entry (names any member of a JSON object or of a list).
 
 ### Catalog
 
