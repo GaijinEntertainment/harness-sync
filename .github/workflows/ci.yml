@@ -58,3 +58,16 @@ jobs:
         with:
           version: "0.3.0"
           report-type: annotations
+
+  # ci-ok is the one check that the branch ruleset requires, so the ruleset never lists the jobs.
+  ci-ok:
+    if: always()
+    needs: [fmt, clippy, test, deny, markdown]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify that no job failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          [[ "$RESULTS" != *'"failure"'* && "$RESULTS" != *'"cancelled"'* ]]
