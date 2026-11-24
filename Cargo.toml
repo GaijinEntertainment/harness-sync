@@ -8,6 +8,7 @@ edition = "2024"
 rust-version = "1.99"
 license = "MIT"
 repository = "https://github.com/GaijinEntertainment/harness-sync"
+authors = ["Gaijin Entertainment", "Anton Zinovyev"]
 readme = "README.md"
 keywords = ["claude-code", "pi", "sync", "git", "cli"]
 categories = ["command-line-utilities", "config"]
