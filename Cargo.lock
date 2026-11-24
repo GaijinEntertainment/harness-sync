@@ -157,7 +157,7 @@ dependencies = [
 
 [[package]]
 name = "harness-sync"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -173,7 +173,7 @@ dependencies = [
 
 [[package]]
 name = "harness-sync-claude-code"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "harness-sync-core",
@@ -182,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "harness-sync-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "jsonc-parser",
@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "harness-sync-git"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "harness-sync-core",
@@ -203,7 +203,7 @@ dependencies = [
 
 [[package]]
 name = "harness-sync-pi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "harness-sync-core",
  "serde_json",
