@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT"
@@ -14,10 +14,10 @@ keywords = ["claude-code", "pi", "sync", "git", "cli"]
 categories = ["command-line-utilities", "config"]
 
 [workspace.dependencies]
-harness-sync-claude-code = { path = "crates/harness-sync-claude-code", version = "0.1.0" }
-harness-sync-core = { path = "crates/harness-sync-core", version = "0.1.0" }
-harness-sync-git = { path = "crates/harness-sync-git", version = "0.1.0" }
-harness-sync-pi = { path = "crates/harness-sync-pi", version = "0.1.0" }
+harness-sync-claude-code = { path = "crates/harness-sync-claude-code", version = "0.1.1" }
+harness-sync-core = { path = "crates/harness-sync-core", version = "0.1.1" }
+harness-sync-git = { path = "crates/harness-sync-git", version = "0.1.1" }
+harness-sync-pi = { path = "crates/harness-sync-pi", version = "0.1.1" }
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 jsonc-parser = { version = "0.34.0", features = ["cst"] }
