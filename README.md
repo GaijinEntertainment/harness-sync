@@ -51,11 +51,14 @@ A file or directory under the home directory that no harness owns, such as `~/.a
 
 ## Install
 
-Download the archive for your platform from the GitHub releases of this repo and put `harness-sync` on your PATH, or
-build it with Rust 1.99 or later:
+Each [release](https://github.com/GaijinEntertainment/harness-sync/releases) holds an archive for Linux (x86_64 and
+aarch64), macOS (Apple silicon and Intel), and Windows (x86_64), and a `.sha256` file with the checksum of each archive.
+Unpack the archive for your platform and put `harness-sync` on your PATH.
+
+Or build it from crates.io with Rust 1.99 or later:
 
 ```sh
-cargo install --locked --git https://github.com/GaijinEntertainment/harness-sync harness-sync
+cargo install --locked harness-sync
 ```
 
 harness-sync runs every repo operation through the `git` executable, so `git` must be on PATH with access to your
@@ -190,8 +193,7 @@ Pull warns when a synced status line, hook, or MCP server names a program that i
 
 Status and a push to the primary target warn when a synced JSON value names a directory of this machine whose files do
 not sync, such as a marketplace in a local directory: another machine gets the value without the directory. A secret
-gives no warning. Add the directory to `include`,
-or pin or exclude the item that holds the value.
+gives no warning. Add the directory to `include`, or pin or exclude the item that holds the value.
 
 ## harness-sync.toml
 
@@ -200,7 +202,7 @@ snapshot of its primary target, and a push to another target applies that target
 machine; the command commits the new file to the repo, or opens a change for a Gerrit target:
 
 ```sh
-harness-sync declarations add exclude .claude/settings.json:/extraKnownMarketplaces/yatai
+harness-sync declarations add exclude .claude/settings.json:/extraKnownMarketplaces/team-tools
 harness-sync declarations remove exclude .claude/settings.json:/model --target mirror
 harness-sync declarations show
 ```
@@ -285,11 +287,10 @@ A report looks like this:
   a pull, and `undeclared_marketplaces` lists `{name, declaration}` pairs from status and push for the marketplaces that
   do not sync and that the repo's `exclude` list does not cover. `unsynced_directories` lists `{id, directory}` pairs
   from status and from a push to the primary target, for the synced values that name a directory whose files do not
-  sync; `directory` is relative to the home directory. `unmanaged_files` lists the
-  repo paths of the files in the remote snapshot that harness-sync does not manage, from status and push; a push to
-  another target lists them in that target's entry of `pushes`. `retired_items` lists the item ids of the retired items
-  of this machine, from status and pull; `retired remove` and `retired keep` list the ones that they removed or kept.
-  Each appears only when it holds entries.
+  sync; `directory` is relative to the home directory. `unmanaged_files` lists the repo paths of the files in the remote
+  snapshot that harness-sync does not manage, from status and push; a push to another target lists them in that target's
+  entry of `pushes`. `retired_items` lists the item ids of the retired items of this machine, from status and pull;
+  `retired remove` and `retired keep` list the ones that they removed or kept. Each appears only when it holds entries.
 - `pushes` lists `{target, outcome, commit, review, items, unmanaged_files}` for each target that a push reached;
   `review` holds the pushed `commit` and the `change_url` for a Gerrit target. The top-level `items`, `base_commit`, and
   `remote_commit` belong to the primary target; the `items` of another target list what the push replaced there.
@@ -302,7 +303,7 @@ Item ids name what `--take`, `pin`, and `unpin` act on. An item id is the path o
 directory, and for a JSON key the path, `:`, and a JSON pointer:
 
 - `.claude/settings.json:/env/EDITOR`
-- `.claude.json:/mcpServers/kartta`
+- `.claude.json:/mcpServers/github`
 - `.claude/rules/rust.md`
 
 The repo holds each file at the same path, so `.claude/settings.json` in the repo holds the synced keys of
@@ -322,4 +323,4 @@ item.
 
 ## License
 
-MIT
+[MIT](LICENSE)
